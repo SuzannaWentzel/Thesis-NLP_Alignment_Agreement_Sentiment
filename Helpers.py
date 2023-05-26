@@ -13,3 +13,11 @@ def read_csv(path):
 
 def color_scheme():
     return ['#d74a94', '#6bb2a5', '#fdd516', '#77b75b', '#ff8800']
+
+
+def print_t(message):
+    print('[TASK]', message)
+
+
+def print_i(message):
+    print('[INFO]', message)
