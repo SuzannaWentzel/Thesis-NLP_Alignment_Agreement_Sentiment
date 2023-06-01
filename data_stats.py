@@ -13,7 +13,7 @@ def get_message_length_stats(discussions):
     print('Min number of words: ', length_of_the_messages.str.len().min())
     print('Max number of words: ', length_of_the_messages.str.len().max())
 
-    messages_more_than_512 = discussions[discussions['text'].str.len() > 512]
+    messages_more_than_512 = length_of_the_messages[length_of_the_messages.str.len() > 512]
     print(messages_more_than_512)
     print('Amount of posts larger than 512 words: ', len(messages_more_than_512.index))
 

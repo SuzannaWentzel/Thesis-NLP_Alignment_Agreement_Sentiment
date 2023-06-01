@@ -13,6 +13,8 @@ from nltk.corpus import wordnet, stopwords
 import seaborn as sns
 
 from Helpers import print_t, print_i, read_csv
+import pickle
+from alive_progress import alive_bar
 
 """
     Returns the wordnet version of the treebank POS tag
@@ -62,7 +64,7 @@ def preprocess_message_lexical_word(post):
 """
 Preprocesses each message for this analysis
 """
-def get_preprocessed_messages_for_lexical_word(discussions, path):
+def get_preprocessed_messages_for_lexical_word(discussions, path, author_data_path):
     print_t('preprocessing messages')
     preprocessed_posts = {}
     # get all the preprocessed posts
@@ -76,8 +78,8 @@ def get_preprocessed_messages_for_lexical_word(discussions, path):
             data.append([
                 discussion.discussion_id,
                 post.post_id,
-                post.author_id,
-                post.text,
+                post.username,
+                post.message,
                 preprocessed
             ])
 
@@ -85,8 +87,16 @@ def get_preprocessed_messages_for_lexical_word(discussions, path):
 
     print_t('storing alignment data')
     df = pd.DataFrame(data, columns=['discussion_id', 'post_id', 'author_id', 'text', 'preprocessed_text'])
-    df.to_csv(path)
+    df.to_pickle(path)
     print_i('task completed')
+
+    author_data = get_data_per_author(df)
+    print_t('Pickling data to ' + str(author_data_path))
+    store_file = open(author_data_path, 'ab')
+    pickle.dump(author_data, store_file)
+    store_file.close()
+    print_i('task completed')
+
     return preprocessed_posts
 
 
@@ -110,10 +120,11 @@ def jaccard_overlap(initial_message, response_message):
 Obtain posts per authors
 """
 def get_data_per_author(df):
+    print_t('Getting data per author')
     unique_authors = df['author_id'].unique()
     author_general = {}
     for author in unique_authors:
-        df_author = df.loc([df['author_id'] == author])
+        df_author = df[df['author_id'] == author]
         posts = []
         preprocessed = []
         for index, row in df_author.iterrows():
@@ -123,6 +134,7 @@ def get_data_per_author(df):
             'posts': posts,
             'words': preprocessed
         }
+    print_i('Task completed')
     return author_general
 
 
@@ -130,25 +142,30 @@ def get_data_per_author(df):
 """
 Computes the actual alignment for each message and each of it's parent messages
 """
-def compute_lexical_word_alignment(discussions, preprocessed_messages, path, preprocessed_path):
+def compute_lexical_word_alignment(discussions, preprocessed_messages, path, author_data_path):
     print_t('computing lexical word alignment for all messages and all of their parents')
 
-    preprocessed_df = read_csv(preprocessed_path)
-    author_data = get_data_per_author(preprocessed_df)
+    print_t('Loading preprocessed data from pickle path' + str(author_data_path))
+    store_file = open(author_data_path, 'rb')
+    author_data = pickle.load(store_file)
+    store_file.close()
+    print_i('Task completed')
 
     data = []
     weight = np.array([0.5, 0.5])
     for i in discussions.keys():
         discussion = discussions[i]
+        print('discussion: ', i)
         for j in discussion.posts.keys():
             post = discussion.posts[j]
             response_preprocessed_index = str(discussion.discussion_id) + '-' + str(post.post_id)
             response_preprocessed = preprocessed_messages[response_preprocessed_index]
 
             word_response_counter = Counter(response_preprocessed)
-            word_author_counter = Counter(author_data['words'])
+            word_author_counter = Counter(author_data[post.username]['words'])
             response_length = len(response_preprocessed)
-            no_words_by_author = len(author_data['words'])
+            no_words_by_author = len(author_data[post.username]['words'])
+            no_posts_by_author = len(author_data[post.username]['posts'])
 
             for k in range(0, len(post.thread)):
                 initial_post_id = post.thread[k]
@@ -164,7 +181,9 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path, pre
 
                     a_2 = word_response_counter[lemma] / response_length
 
-                    b_1 = 0
+                    no_responses_with_word = len([post for post in author_data[post.username]['posts'] if lemma in post])
+
+                    b_1 = no_responses_with_word / no_posts_by_author
 
                     b_2 = word_author_counter[lemma] / no_words_by_author
 
@@ -189,7 +208,7 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path, pre
     df.to_csv(path)
     print_i('task completed')
 
-    return discussions
+    return df
 
 
 """
@@ -204,7 +223,6 @@ def get_histograms_lexical_word_alignment_per_5(df):
             plot_disc_ids = discussion_ids[:5]
         else:
             plot_disc_ids = discussion_ids
-        print(plot_disc_ids)
 
         first_index = plot_disc_ids[0]
         last_index = plot_disc_ids[-1]
@@ -242,7 +260,7 @@ def get_overall_histogram_lexical_word_alignment(df):
     ax.set_ylabel('# of posts')
 
     # alignment is in range [0, 0.5], normalize to [0, 1]
-    df['lexical_word_alignment'] = df['lexical_word_alignment'] * 2
+    df['lexical_word_alignment'] = (df['lexical_word_alignment'] + 1) / 2
 
     for d_idx in discussion_ids:
         discussion_df = df[df['discussion_id'] == d_idx]
@@ -258,7 +276,7 @@ def get_overall_histogram_lexical_word_alignment(df):
 """
 Generates one stacked histogram for all discussions combined, turns per alignment bin
 """
-def get_overall_histogram_lexical_word_alignment_stacked(df):
+def get_overall_histogram_lexical_word_alignment_stacked(df, path):
     fig, ax = plt.subplots()
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 100000) #2500000 for linear
@@ -268,13 +286,13 @@ def get_overall_histogram_lexical_word_alignment_stacked(df):
     ax.set_xlabel('Alignment as Jaccard overlap')
     ax.set_ylabel('# of posts')
 
-    # alignment is in range [0, 0.5], normalize to [0, 1]
-    df['lexical_word_alignment'] = df['lexical_word_alignment'] * 2
+    # alignment is in range [-1, 1], normalize to [0, 1]
+    df['lexical_word_alignment'] = (df['lexical_word_alignment'] + 1) / 2
 
     alignment = df['lexical_word_alignment']
     ax.hist(alignment, bins=np.arange(0, 1, 0.025), alpha=0.8, color='#d74a94')  # color='#d74a94'  histtype='step'
 
-    fig.savefig('./Results/Lexical_word_alignment/all_histo_thread_stacked_zoom_x1')
+    fig.savefig(path)
     fig.show()
 
 # jaccard_overlap(['a', 'b', 'c', 'd'], ['e', 'b', 'c', 'd'])

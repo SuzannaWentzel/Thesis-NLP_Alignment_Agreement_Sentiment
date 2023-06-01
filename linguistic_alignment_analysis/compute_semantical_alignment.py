@@ -9,10 +9,10 @@ import numpy as np
 Get BERT embedding for a message
 """
 def preprocess_message_semantic(message):
-    tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
+    tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
     print(tokenizer.model_max_length)
-    model = BertModel.from_pretrained("bert-large-cased")
-    encoded_input = tokenizer(message, return_tensors='pt')
+    model = BertModel.from_pretrained("bert-base-cased")
+    encoded_input = tokenizer(message, return_tensors='pt', truncation=True, max_length=512) # truncates to 512 words as that is the max length accepted by the model
     return model(**encoded_input)
 
 
@@ -83,8 +83,8 @@ def get_overall_histogram_semantic_alignment(df, path):
     ax.set_xlabel('Alignment as cosine distance')
     ax.set_ylabel('# of posts')
 
-    # alignment is in range [0, 0.5], normalize to [0, 1]
-    df['semantical_alignment'] = df['semantical_alignment'] * 2
+    # alignment is in range [-1, 1], normalize to [0, 1]
+    df['semantical_alignment'] = (df['semantical_alignment'] + 1) / 2
 
     for d_idx in discussion_ids:
         discussion_df = df[df['discussion_id'] == d_idx]
