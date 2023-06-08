@@ -9,9 +9,6 @@ import math
 import re
 
 
-__datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv'
-
-
 """
 Extracts the data from the dataframe and converts it into a dict of discussions with dicts of posts.
 """
@@ -176,10 +173,8 @@ def merge_consecutive_messages(discussions):
 """
 MAIN: run preprocessing
 """
-def run_preprocessing():
-    global __datapath__
-    print(__datapath__)
-    data = read_csv(__datapath__)
+def run_preprocessing(datapath):
+    data = read_csv(datapath)
     discussion_posts = get_discusssion_posts(data)
     removed_empty = remove_empty_discussions(discussion_posts)
     replaced_urls = replace_urls(removed_empty)

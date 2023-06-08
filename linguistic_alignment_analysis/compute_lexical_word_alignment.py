@@ -151,6 +151,19 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path, aut
     store_file.close()
     print_i('Task completed')
 
+    # proportion of words in R that are w
+    # proportion of responses R by author i containing w
+    # proportion of words by author i that are m
+
+    # Amount of posts
+    no_posts = len(preprocessed_messages.values())
+
+
+    # Amount of words
+
+
+
+
     data = []
     weight = np.array([0.5, 0.5])
     for i in discussions.keys():

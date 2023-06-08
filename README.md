@@ -20,3 +20,5 @@ This repo needs the following packages (including their dependencies):
 - numpy
 - pandas
 - stanza
+- scipy
+- transformers

@@ -11,6 +11,9 @@ import pickle
 
 __threaded_data__ = {}
 __linear_data__ = {}
+
+__datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv'
+
 __pickle_path_preprocessed_from_enough_authors_enough_posts_linear__ = './PickleData/preprocessed_from_enough_authors_enough_posts_linear'
 __pickle_path_preprocessed_from_enough_authors_enough_posts_tree__ = './PickleData/preprocessed_from_enough_authors_enough_posts_tree'
 __pickle_path_preprocessed_for_lexical_word_thread__ = './PickleData/preprocessed_lexical_word'
@@ -184,7 +187,7 @@ def get_semantical_alignment(semantic_preprocessed=True, alignment_ran=True, get
 
 # """
 
-# get_preprocessed_data()
+# get_preprocessed_data(__datapath__)
 get_preprocessed_data_from_pickle()
 get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=False, get_linear=True, get_thread=True)
 # get_syntactical_alignment(semantic_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)
