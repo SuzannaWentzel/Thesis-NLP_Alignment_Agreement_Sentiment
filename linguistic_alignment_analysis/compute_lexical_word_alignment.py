@@ -10,11 +10,10 @@ from nltk.tokenize import word_tokenize
 import string
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet, stopwords
-import seaborn as sns
 
 from Helpers import print_t, print_i, read_csv
 import pickle
-from alive_progress import alive_bar
+
 
 """
     Returns the wordnet version of the treebank POS tag
