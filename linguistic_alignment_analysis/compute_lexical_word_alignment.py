@@ -60,11 +60,14 @@ def preprocess_message_lexical_word(post):
     return lemmas
 
 
-
-"""
-Preprocesses each message for this analysis
-"""
 def get_preprocessed_messages_for_lexical_word(discussions, path, author_data_path):
+    """
+    Preprocesses each message for this analysis
+    :param discussions: discussions in list of objects
+    :param path: path where to store dataframe pickle
+    :param author_data_path: path where to store author data
+    :return: dict with 'discussion.id-post.id' key and preprocessed message value
+    """
     print_t('preprocessing messages')
     preprocessed_posts = {}
     # get all the preprocessed posts

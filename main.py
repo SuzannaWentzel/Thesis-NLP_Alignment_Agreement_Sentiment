@@ -1,4 +1,4 @@
-from Helpers import read_csv
+from Helpers import read_csv, print_t, print_i
 from linguistic_alignment_analysis.compute_lexical_word_alignment import get_preprocessed_messages_for_lexical_word, \
     compute_lexical_word_alignment, get_overall_histogram_lexical_word_alignment, \
     get_overall_histogram_lexical_word_alignment_stacked
@@ -12,10 +12,11 @@ import pickle
 __threaded_data__ = {}
 __linear_data__ = {}
 
-__datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv'
+# __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv'
+__datapath__ = './Data/discussion_post_text_date_author_parents_unfiltered.csv'
 
-__pickle_path_preprocessed_from_enough_authors_enough_posts_linear__ = './PickleData/preprocessed_from_enough_authors_enough_posts_linear'
-__pickle_path_preprocessed_from_enough_authors_enough_posts_tree__ = './PickleData/preprocessed_from_enough_authors_enough_posts_tree'
+__pickle_path_preprocessed_linear__ = './PickleData/preprocessed_linear'
+__pickle_path_preprocessed_tree__ = './PickleData/preprocessed_tree'
 __pickle_path_preprocessed_for_lexical_word_thread__ = './PickleData/preprocessed_lexical_word'
 __pickle_path_preprocessed_for_lexical_word_linear__ = './PickleData/preprocessed_lexical_word_linear'
 __pickle_path_preprocessed_for_semantic_linear__ = 'PickleData/preprocessed_semantic_linear'
@@ -29,64 +30,75 @@ __csv_lexical_word_alignment_linear__ = './AlignmentData/lexical_word_alignment_
 __csv_semantic_alignment_thread__ = './AlignmentData/semantic_alignment_thread.csv'
 __csv_semantic_alignment_linear__ = './AlignmentData/semantic_alignment_linear.csv'
 
-"""
-Stores the preprocessed data as pickle to work faster
-"""
+
 def store_data(data, path):
-    print('[TASK] Pickling data to ', path)
+    """
+    Stores the preprocessed data as pickle to work faster
+    :param data: data to pickle
+    :param path: path where to store the data
+    """
+    print_t('Pickling data to ', path)
     store_file = open(path, 'ab')
     pickle.dump(data, store_file)
     store_file.close()
-    print('[INFO] task completed')
+    print_i('Pickled data')
 
 
-"""
-Loads the preprocessed data from pickle to work faster
-"""
 def load_data(path):
-    print('[TASK] Loading preprocessed data from pickle path', path)
+    """
+    Loads the preprocessed data from pickle to work faster
+    :param path: path where pickle is stored
+    :return: data from pickle
+    """
+    print_t('Loading preprocessed data from pickle path', path)
     store_file = open(path, 'rb')
     discussion = pickle.load(store_file)
     store_file.close()
-    print('[INFO] Task completed')
+    print_i('Loaded data from pickle')
     return discussion
 
 
-"""
-Main function for getting the preprocessed data
-"""
 def get_preprocessed_data():
-    print('[TASK] Preprocessing data')
+    """
+    Main function for getting the preprocessed data: runs preprocessing and stores them in global var
+    """
+    print_t('Preprocessing data')
     global __threaded_data__, __linear_data__
-    __threaded_data__, __linear_data__ = run_preprocessing()
-    store_data(__threaded_data__, __pickle_path_preprocessed_from_enough_authors_enough_posts_tree__)
-    store_data(__linear_data__, __pickle_path_preprocessed_from_enough_authors_enough_posts_linear__)
-    print('[INFO] Preprocessing completed')
+    __threaded_data__, __linear_data__ = run_preprocessing(__datapath__)
+    store_data(__threaded_data__, __pickle_path_preprocessed_tree__)
+    store_data(__linear_data__, __pickle_path_preprocessed_linear__)
+    print_i('Preprocessing completed')
 
 
-"""
-Main function for getting the preprocessed data from a pickle
-"""
 def get_preprocessed_data_from_pickle():
-    print('[TASK] Getting preprocessed data')
+    """
+    Main function for getting the preprocessed data from a pickle
+    :return: stores the pre-computed preprocessed data in global vars
+    """
+    print_t('Getting preprocessed data')
     global __threaded_data__, __linear_data__
-    __threaded_data__ = load_data(__pickle_path_preprocessed_from_enough_authors_enough_posts_tree__)
-    __linear_data__ = load_data(__pickle_path_preprocessed_from_enough_authors_enough_posts_linear__)
-    print('[INFO] Got preprocessed data')
+    __threaded_data__ = load_data(__pickle_path_preprocessed_tree__)
+    __linear_data__ = load_data(__pickle_path_preprocessed_linear__)
+    print_i('Got preprocessed data')
 
 
-"""
-Get lexical word alignment
-"""
 def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, get_linear=False, get_thread=False):
-    print('[TASK] Getting lexical word alignment')
+    """
+    Get lexical word alignment
+    :param lexical_preprocessed: boolean if discussions have been preprocessed for this analysis
+    :param alignment_ran: boolean if alignment has been run
+    :param get_linear: boolean if we want to investigate the linear threads
+    :param get_thread: boolean if we want to investigate the tree-structured threads
+    :return: nothing: shows histograms and prints percentiles
+    """
+    print_t('Getting lexical word alignment')
     global __threaded_data__, __linear_data__
 
     # __threaded_data__ = {1: __threaded_data__[1] }
     # __linear_data__ = {1: __linear_data__[1] }
 
     if get_linear:
-        print('[TASK] Getting linear alignment')
+        print_t('Getting linear lexical word alignment')
         # Get linear lexical word alignment
         if not lexical_preprocessed:
             # preprocess messages for linear
@@ -104,10 +116,10 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
             alignment_linear_df = read_csv(__csv_lexical_word_alignment_linear__)
 
         get_overall_histogram_lexical_word_alignment_stacked(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_stacked')
-        print('[INFO] task completed: got linear alignment')
+        print_i('task completed: got linear lexical word alignment')
 
     if get_thread:
-        print('[TASK]')
+        print_t('Getting threaded lexical word alignment')
         # Get thread lexical word alignment
         if not lexical_preprocessed:
             # preprocess messages for thread
@@ -125,17 +137,21 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
             alignment_threaded_df = read_csv(__csv_lexical_word_alignment_thread__)
 
         get_overall_histogram_lexical_word_alignment_stacked(alignment_threaded_df, './Results/Lexical_word_alignment/all_histo_thread_stacked')
-
+        print_i('task completed: got threaded lexical word alignment')
     # Get the overall histogram
     # get_overall_histogram_lexical_word_alignment(alignment_threaded_df)
-    print('[INFO] Got lexical word alignment')
+    print_i('Got lexical word alignment')
 
 
-"""
-Get Semantical alignment
-"""
-# """
 def get_semantical_alignment(semantic_preprocessed=True, alignment_ran=True, get_linear=False, get_thread=False):
+    """
+    Get Semantical alignment
+    :param semantic_preprocessed: boolean if data has been preprocessed for this analysis
+    :param alignment_ran: boolean if alignment has been ran
+    :param get_linear: boolean if we want to investigate the linear threads
+    :param get_thread: boolean if we want to investigate the tree-structured threads
+    :return: nothing: shows histograms and prints percentiles
+    """
     global __threaded_data__, __linear_data__
 
     # Get alignment of threaded structure
@@ -185,9 +201,8 @@ def get_semantical_alignment(semantic_preprocessed=True, alignment_ran=True, get
         get_overall_histogram_semantic_alignment(alignment_linear_df,
                                                      './Results/Semantical_alignment/all_histo_linear')
 
-# """
 
-# get_preprocessed_data(__datapath__)
-get_preprocessed_data_from_pickle()
-get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=False, get_linear=True, get_thread=True)
+get_preprocessed_data()
+# get_preprocessed_data_from_pickle()
+# get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=False, get_linear=True, get_thread=True)
 # get_syntactical_alignment(semantic_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)

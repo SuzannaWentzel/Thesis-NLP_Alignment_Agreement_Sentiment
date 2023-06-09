@@ -1,42 +1,42 @@
 import pandas as pd
 
-from Helpers import read_csv
+from Helpers import read_csv, df_to_object, print_t, print_i
 from Models.Discussion import Discussion
 from Models.Post import Post
 from datetime import datetime
 import copy
 import math
 import re
+from linguistic_alignment_analysis.compute_lexical_word_alignment import preprocess_message_lexical_word, jaccard_overlap
 
 
-"""
-Extracts the data from the dataframe and converts it into a dict of discussions with dicts of posts.
-"""
+__jaccard_similarity_thread__ = '../AlignmentData/jaccard_similarity_thread.csv'
+__jaccard_similarity_linear__ = '../AlignmentData/jaccard_similarity_linear.csv'
+
+
+
 def get_discusssion_posts(input_df):
-    print('[TASK] getting data from dataframe and converting to discussions with posts')
+    """
+    Extracts the data from the dataframe and converts it into a dict of discussions with dicts of posts.
 
-    discussions = {}
-    # Divide into discussions & posts
-    discussion_indices = input_df['discussion_id'].unique()
-    # discussion_indices = [1, 2, 3] # For testing purposes
-    for i in discussion_indices:
-        discussion_df = input_df.loc[input_df['discussion_id'] == i]
-        posts = {}
-        for index, row in discussion_df.iterrows():
-            date = datetime.strptime(str(row['creation_date']), "%Y-%m-%d %H:%M:%S")
-            post = Post(row['discussion_id'], row['post_id'], row['text'], row['parent_post_id'], row['author_id'], date)
-            posts[row['post_id']] = post
-        discussion = Discussion(i, posts)
-        discussions[i] = discussion
-    print('[INFO] task completed')
+    :param input_df: dataframe with discussions
+    :return: discussions as list of objects
+    """
+
+    print_t('getting data from dataframe and converting to discussions with posts')
+
+    discussions = df_to_object(input_df)
+    print_i('getting discussions completed')
     return discussions
 
 
-"""
-Replace URLs with [URL] tag
-"""
 def replace_urls(discussions):
-    print('[TASK] replacing URLs with [URL] tags')
+    """
+    Replaces URLs with [URL] tag
+    :param discussions: discussions as list of objects
+    :return: discussions as list of objects, with urls replaced in post messages
+    """
+    print_t('replacing URLs with [URL] tags')
     for i in discussions.keys():
         discussion = discussions[i]
         for j in discussion.posts.keys():
@@ -44,15 +44,17 @@ def replace_urls(discussions):
             message = re.sub('http[s]?://\S+', '[URL]', post.message)
             message = re.sub('www.\S+', '[URL]', message)
             post.update_message(message)
-    print('[INFO] task completed')
+    print_i('replaced URLs with [URL] tags')
     return discussions
 
 
-"""
-Converts discussions into tree-structured threads
-"""
 def get_discussion_threads(discussions):
-    print('[TASK] getting threaded discussions')
+    """
+    Converts discussions into tree-structured threads
+    :param discussions: discussions as list of objects
+    :return: discussions with threads included in posts (based on parent posts)
+    """
+    print_t('getting threaded discussions')
     # Make the threads
     for i in discussions.keys():
         discussion = discussions[i]
@@ -64,14 +66,17 @@ def get_discussion_threads(discussions):
                 thread.append(parent_post.post_id)
                 post.set_thread(thread)
 
-    print('[INFO] task completed')
+    print_i('got threaded discussions')
     return discussions
 
-"""
-Converts discussions into linear threads
-"""
+
 def get_discussion_linear_threads(discussions):
-    print('[TASK] getting linear discussions')
+    """
+    Converts discussions into linear threads
+    :param discussions: discussions as list of objects
+    :return: discussions as list of objects with threads included in posts (based on time)
+    """
+    print_t('getting linear discussions')
     # posts are with post_id already ordered by date in discussions
     # create thread with all previous posts
     for i in discussions.keys():
@@ -82,41 +87,17 @@ def get_discussion_linear_threads(discussions):
             history = post_list[:post_list.index(j)]
             post.set_thread(history)
 
-    print('[INFO] task completed')
+    print_i('got linear discussions')
     return discussions
 
 
-# """
-# Removes empty messages & threads in which these posts are
-# """
-# def remove_empty(discussions):
-#     print('[TASK] removing empty messages & threads')
-#     counter = 0
-#     for i in discussions.keys():
-#         empty_messages = []
-#         discussion = discussions[i]
-#         for j in discussion.posts.keys():
-#             post = discussion.posts[j]
-#             text_ = post.message
-#             if not text_ or not isinstance(text_, str):
-#                 # This message has no text
-#                 print(str(counter), 'posts found without text!', post.post_id, j)
-#                 empty_messages.append(j)
-#                 counter += 1
-#
-#         if len(empty_messages) > 0:
-#             print('empty messages: ', empty_messages)
-#             print(discussion.posts)
-#             discussion.posts = [post for post in discussion.posts if set(empty_messages).isdisjoint(post.thread)]
-#             print(discussion.posts)
-#     return discussions
-
-
-"""
-Removes discussions with emtpy messages
-"""
 def remove_empty_discussions(discussions):
-    print('[TASK] removing discussions with empty messages')
+    """
+    Removes discussions with emtpy messages
+    :param discussions: discussions as list of objects
+    :return: discussions as list of objects, with discussions with empty messages removed.
+    """
+    print_t('removing discussions with empty messages')
 
     empty_discussion_indices = []
     for i in discussions.keys():
@@ -128,18 +109,20 @@ def remove_empty_discussions(discussions):
                 # message has no text, remove discussion.
                 empty_discussion_indices.append(discussion.discussion_id)
 
-    print('[INFO] removing ', len(empty_discussion_indices), 'discussions...')
+    print_i('removing ' + str(len(empty_discussion_indices)) + 'discussions...')
     stripped_discussions = {key: value for key, value in zip(discussions.keys(), discussions.values()) if value.discussion_id not in empty_discussion_indices }
 
-    print('[INFO] task completed, ', len(stripped_discussions.keys()), 'discussions left')
+    print_i('removed empty discussions, ' + str(len(stripped_discussions.keys())) + ' discussions left')
     return stripped_discussions
 
 
-"""
-Merges consecutive messages
-"""
 def merge_consecutive_messages(discussions):
-    print('[TASK] merging consecutive messages')
+    """
+    Merges consecutive messages
+    :param discussions: discussions as list of objects
+    :return: discussions as list of objects, with consecutive messages of a same author merged.
+    """
+    print_t('merging consecutive messages')
     # Find message where previous message is of the same author
     for i in discussions.keys():
         discussion = discussions[i]
@@ -166,14 +149,113 @@ def merge_consecutive_messages(discussions):
             new_threads = [indx for indx in post.thread if indx not in to_remove_posts]
             post.set_thread(new_threads)
 
-    print('[INFO] task completed')
+    print_i('merged consecutive messages')
     return discussions
 
 
-"""
-MAIN: run preprocessing
-"""
+def remove_0_overlap(discussions, avg_overlap_data_path):
+    """
+    Removes discussions where the average Jaccard similarity is zero (outliers)
+    :param discussions: discussions as list of objects
+    :param avg_overlap_data_path: path where to store the average overlap
+    :return: discussions as list of objects with average of 0 overlap removed
+    """
+    # Run jaccard preprocessing
+    print_t('preprocessing messages')
+    preprocessed_messages = {}
+    # get all the preprocessed posts
+    for i in discussions.keys():
+        discussion = discussions[i]
+        print_i('preprocessing for discussion' + str(discussion.discussion_id))
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            preprocessed = preprocess_message_lexical_word(post.message)
+            preprocessed_messages[str(i) + '-' + str(j)] = preprocessed
+
+    print_i('preprocessed messages')
+
+    print_t('computing Jaccard similarity for all messages and all of their parents')
+    data = []
+    for i in discussions.keys():
+        print('computing overlap: ', i)
+        discussion = discussions[i]
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            response_preprocessed_index = str(discussion.discussion_id) + '-' + str(post.post_id)
+            response_preprocessed = preprocessed_messages[response_preprocessed_index]
+            for k in range(0, len(post.thread)):
+                initial_post_id = post.thread[k]
+                initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
+                initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
+                alignment = jaccard_overlap(initial_preprocessed, response_preprocessed)
+                distance = len(post.thread) - k
+                data.append([
+                    discussion.discussion_id,
+                    initial_post_id,
+                    post.post_id,
+                    distance,
+                    alignment
+                ])
+    print_i('computed jaccard similarity')
+
+    # Obtain jaccard similarity dataframe
+    discussions_df = pd.DataFrame(data, columns=['discussion_id', 'initial_message_id', 'response_message_id', 'distance', 'jaccard'])
+
+    # Compute averages for each discussion
+    print_t('computing averages')
+    averages = []
+    discussion_indices = discussions_df['discussion_id'].unique()
+    for i in discussion_indices:
+        print('averaging alignment', i)
+        discussion_df = discussions_df.loc[discussions_df['discussion_id'] == i]
+        discussion_alignment_avg = discussion_df['jaccard'].mean()
+        averages.append([
+            i,
+            discussion_alignment_avg
+        ])
+
+    # Store average overlap
+    average_df = pd.DataFrame(averages, columns=['discussion_id', 'average_alignment'])
+    average_df.to_csv(avg_overlap_data_path)
+    print_i('Computed averages')
+
+    # Remove discussions with overlap of 0
+    print_t('Removing 0 overlap discussions')
+    discussion_0 = average_df[average_df['average_alignment'] == 0]
+    discussion_ids_0 = discussion_0['discussion_id'].unique().tolist()
+    print_i('Found ' + str(len(discussion_ids_0)) + 'discussions to remove')
+    filtered_discussions = {key: value for key, value in zip(discussions.keys(), discussions.values()) if value.discussion_id not in discussion_ids_0 }
+
+    print_i('Removed 0 overlap discussions')
+    return filtered_discussions
+
+
+def remove_high_overlap(discussions, avg_overlap_data_path):
+    """
+    Removes discussions where the average Jaccard similarity is higher than 0.2 (outliers)
+    :param discussions: discussions as list of objects
+    :param avg_overlap_data_path: path from where to read the average overlap
+    :return: discussions as list of objects with average higher than 0.2 overlap
+    """
+    print_t('Removing high overlap')
+    # If removing 0 overlap is run before, overlap was already computed. Therefore, loads data
+    average_df = read_csv(avg_overlap_data_path)
+
+    discussion_high = average_df[average_df['average_alignment'] > 0.2]
+    discussion_ids_high = discussion_high['discussion_id'].unique().tolist()
+    print_i('Found ' + str(len(discussion_ids_high)) + 'discussions to remove')
+    filtered_discussions = {key: value for key, value in zip(discussions.keys(), discussions.values()) if value.discussion_id not in discussion_ids_high }
+
+    print_i('Removed high overlap discussions')
+    return filtered_discussions
+
+
 def run_preprocessing(datapath):
+    """
+    Main function for running the preprocessing on a csv containing all discussions, posts, date, author, parent post etc.
+    :param datapath: path where the csv data is read from
+    :return: two lists of discussions as objects, for threads and for linear.
+    """
     data = read_csv(datapath)
     discussion_posts = get_discusssion_posts(data)
     removed_empty = remove_empty_discussions(discussion_posts)
@@ -182,5 +264,9 @@ def run_preprocessing(datapath):
     linear = get_discussion_linear_threads(copy.deepcopy(replaced_urls))
     threads_consecutive_merged = merge_consecutive_messages(threads)
     linear_consecutive_merged = merge_consecutive_messages(linear)
+    threads_removed_0_overlap = remove_0_overlap(threads_consecutive_merged, __jaccard_similarity_thread__)
+    linear_removed_0_overlap = remove_0_overlap(linear_consecutive_merged, __jaccard_similarity_linear__)
+    threads_removed_high_overlap = remove_high_overlap(threads_removed_0_overlap, __jaccard_similarity_thread__)
+    linear_removed_high_overlap = remove_high_overlap(linear_removed_0_overlap, __jaccard_similarity_linear__)
 
-    return threads_consecutive_merged, linear_consecutive_merged
+    return threads_removed_high_overlap, linear_removed_high_overlap

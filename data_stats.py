@@ -316,20 +316,24 @@ def get_author_stats():
 
     len_discussion_df = pd.DataFrame(len_list, columns=['discussion_id', 'discussion_length', 'no_authors'])
 
-    data = []
-    x = []
-    y = []
-    z = []
-    discussion_length_indices = len_discussion_df['discussion_length'].unique()
-    author_indices = len_discussion_df['no_authors'].unique()
-    for i in discussion_length_indices:
-        for j in author_indices:
-            no_discussions_length = len_discussion_df[
-                (len_discussion_df['discussion_length'] == i) & (len_discussion_df['no_authors'] == j)]
-            data.append([i, j, len(no_discussions_length)])
-            x.append(i)
-            y.append(j)
-            z.append(len(no_discussions_length))
+    # x = []
+    # y = []
+    # z = []
+    # discussion_length_indices = len_discussion_df['discussion_length'].unique()
+    max_discussion_length = len_discussion_df['discussion_length'].max()
+    # author_indices = len_discussion_df['no_authors'].unique()
+    max_no_authors = len_discussion_df['no_authors'].max()
+    no_rows = (max_discussion_length + 1) * (max_no_authors + 1)
+    data = np.full((no_rows, 3), None)
+
+    for i in range(0, max_discussion_length + 1):
+        for j in range(0, max_no_authors + 1):
+
+            no_discussions_length = len_discussion_df.loc[(len_discussion_df['discussion_length'] == i) & (len_discussion_df['no_authors'] == j)]
+            data_index = (i * max_no_authors) + j
+            data[data_index][0] = i
+            data[data_index][1] = j
+            data[data_index][2] = len(no_discussions_length)
 
     # fig, ax = plt.subplots()
     # im = ax.imshow(data, cmap="RdPu")
@@ -345,13 +349,9 @@ def get_author_stats():
     # plt.colorbar()
     # plt.show()
 
-    data_df = pd.DataFrame({
-        "x": x,
-        "y": y,
-        "z": z,
-    })
+    data_df = pd.DataFrame(data, columns=['discussion_length', 'no_authors', 'no_discussions'])
 
-    data_df_pivot = data_df.pivot(columns="x", index="y")
+    data_df_pivot = data_df.pivot(columns="discussion_length", index="no_authors")
     plt.pcolormesh(data_df_pivot.values, norm="log", cmap="jet")
     # plt.xlim(1300)
     # plt.ylim(160)
@@ -374,6 +374,6 @@ def get_author_stats():
 
 # get_message_length_stats(df)
 # get_discussion_length_stats()
-get_overlap_stats()
-# get_author_stats()
+# get_overlap_stats()
+get_author_stats()
 
