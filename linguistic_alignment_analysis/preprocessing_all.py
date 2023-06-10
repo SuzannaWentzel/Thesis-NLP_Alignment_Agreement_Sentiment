@@ -260,13 +260,15 @@ def run_preprocessing(datapath):
     discussion_posts = get_discusssion_posts(data)
     removed_empty = remove_empty_discussions(discussion_posts)
     replaced_urls = replace_urls(removed_empty)
+
     threads = get_discussion_threads(replaced_urls)
-    linear = get_discussion_linear_threads(copy.deepcopy(replaced_urls))
     threads_consecutive_merged = merge_consecutive_messages(threads)
-    linear_consecutive_merged = merge_consecutive_messages(linear)
     threads_removed_0_overlap = remove_0_overlap(threads_consecutive_merged, __jaccard_similarity_thread__)
-    linear_removed_0_overlap = remove_0_overlap(linear_consecutive_merged, __jaccard_similarity_linear__)
     threads_removed_high_overlap = remove_high_overlap(threads_removed_0_overlap, __jaccard_similarity_thread__)
+
+    linear = get_discussion_linear_threads(copy.deepcopy(replaced_urls))
+    linear_consecutive_merged = merge_consecutive_messages(linear)
+    linear_removed_0_overlap = remove_0_overlap(linear_consecutive_merged, __jaccard_similarity_linear__)
     linear_removed_high_overlap = remove_high_overlap(linear_removed_0_overlap, __jaccard_similarity_linear__)
 
     return threads_removed_high_overlap, linear_removed_high_overlap

@@ -5,6 +5,8 @@ from matplotlib.colors import BoundaryNorm
 from matplotlib.ticker import MaxNLocator
 import numpy as np
 from linguistic_alignment_analysis.compute_lexical_word_alignment import jaccard_overlap, preprocess_message_lexical_word
+from linguistic_alignment_analysis.preprocessing_all import run_preprocessing
+import copy
 
 
 
@@ -19,6 +21,11 @@ __discussion_alignment_histo_linear__ = './Results/DataStats/discussion_alignmen
 __discussion_alignment_histo_thread__ = './Results/DataStats/discussion_alignment_histo_thread.png'
 __avg_alignment_linear__ = './Results/DataStats/TempStorage/df_avg_alignment_linear.csv'
 __avg_alignment_thread__ = './Results/DataStats/TempStorage/df_avg_alignment_thread.csv'
+__max_thread_linear__ = './Results/DataStats/TempStorage/df_max_thread_linear.csv'
+__max_thread_thread__ = './Results/DataStats/TempStorage/df_max_thread_thread.csv'
+__max_thread_histo_linear__ = './Results/DataStats/histo_max_thread_linear.png'
+__max_thread_histo_thread__ = './Results/DataStats/histo_max_thread_thread.png'
+
 
 
 def get_message_length_stats(discussions):
@@ -390,8 +397,93 @@ def get_author_stats():
     """
 
 
+def get_max_threads(discussions):
+    """
+    Returns the longest thread (including last message) in a discussion
+    :param discussions: list of discussion objects
+    :return: df with longest thread per discussion
+    """
+
+    max_threads = []
+    for d_idx in discussions.keys():
+        discussion = discussions[d_idx]
+        max_thread = []
+        for p_idx in discussion.posts.keys():
+            post_thread = discussion.posts[p_idx].thread
+            post_thread_appended = copy.deepcopy(post_thread)
+            post_thread_appended.append(discussion.posts[p_idx].post_id)
+            if len(post_thread_appended) > len(max_thread):
+                max_thread = post_thread_appended
+        max_threads.append([
+            d_idx,
+            max_thread,
+            len(max_thread)
+        ])
+
+    max_thread_df = pd.DataFrame(max_threads, columns=['discussion_id', 'max_thread', 'len_max_thread'])
+    return max_thread_df
+
+
+def get_pretty_max_thread_stats(discussion_df, storage_path):
+    """
+    Prints the max thread stats: mean, avg, percentiles and histogram
+    :param discussion_df: dataframe with max thread data per discussion
+    :param storage_path: path where to store the histogram
+    """
+    print('mean: \t', discussion_df['len_max_thread'].mean())
+    print('median: \t', discussion_df['len_max_thread'].median())
+    print('min: \t', discussion_df['len_max_thread'].min())
+    print('max: \t', discussion_df['len_max_thread'].max())
+    print('percentiles: \t', discussion_df['len_max_thread'].describe(percentiles=[.01, .05, .1, .9, .95, .99, .995]))
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
+
+    fig.suptitle('Length of longest threads')
+    fig.subplots_adjust(hspace=0.5)
+
+    ax1.set_xlim(0, 1300)
+    ax1.set_ylim(0, 10000)
+    ax2.set_xlim(0, 1300)
+    ax2.set_yscale('log')
+    ax2.set_ylabel('# discussions')
+    ax3.set_xlim(0, 20)
+    ax3.set_ylim(0, 1000)
+    ax3.set_xlabel('# posts')
+    # ax.set_ylim(0, 100000) #2500000 for linear
+
+    # for ax in fig.get_axes():
+    #     ax.set_xlabel('# posts')
+    #     ax.set_ylabel('# discussions')
+
+    ax1.hist(discussion_df['len_max_thread'], bins=np.arange(0, 1300, 10), color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax2.hist(discussion_df['len_max_thread'], bins=np.arange(0, 1300, 10), color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax3.hist(discussion_df['len_max_thread'], bins=np.arange(0, 1300, 1), color='#d74a94')  # color='#d74a94'  histtype='step'
+
+    fig.savefig(storage_path)
+    fig.show()
+
+
+def get_max_thread_stats():
+    threads_discussions, linear_discussions = run_preprocessing(__datapath__)
+    # threads_discussions = {1: threads_discussions[1]}
+    # linear_discussions = {1: linear_discussions[1]}
+    print('getting threaded max')
+    max_thread_df_thread = get_max_threads(threads_discussions)
+    print(max_thread_df_thread)
+    print('getting linear max')
+    max_thread_df_linear = get_max_threads(linear_discussions)
+    print(max_thread_df_linear)
+    max_thread_df_thread.to_csv(__max_thread_thread__)
+    max_thread_df_linear.to_csv(__max_thread_linear__)
+    get_pretty_max_thread_stats(max_thread_df_thread, __max_thread_histo_thread__)
+    get_pretty_max_thread_stats(max_thread_df_linear, __max_thread_histo_linear__)
+
+
+
+
+
 # get_message_length_stats(df)
 # get_discussion_length_stats()
 # get_overlap_stats()
-get_author_stats()
-
+# get_author_stats()
+get_max_thread_stats()
