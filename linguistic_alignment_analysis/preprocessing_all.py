@@ -10,9 +10,8 @@ import re
 from linguistic_alignment_analysis.compute_lexical_word_alignment import preprocess_message_lexical_word, jaccard_overlap
 
 
-__jaccard_similarity_thread__ = '../AlignmentData/jaccard_similarity_thread.csv'
-__jaccard_similarity_linear__ = '../AlignmentData/jaccard_similarity_linear.csv'
-
+__jaccard_similarity_thread__ = 'AlignmentData/jaccard_similarity_thread.csv'
+__jaccard_similarity_linear__ = 'AlignmentData/jaccard_similarity_linear.csv'
 
 
 def get_discusssion_posts(input_df):
@@ -257,6 +256,7 @@ def run_preprocessing(datapath):
     :return: two lists of discussions as objects, for threads and for linear.
     """
     data = read_csv(datapath)
+    # data = data.loc[data['discussion_id'] == 1]
     discussion_posts = get_discusssion_posts(data)
     removed_empty = remove_empty_discussions(discussion_posts)
     replaced_urls = replace_urls(removed_empty)

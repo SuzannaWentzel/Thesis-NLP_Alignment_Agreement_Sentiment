@@ -7,6 +7,7 @@ from linguistic_alignment_analysis.compute_semantical_alignment import get_prepr
 from linguistic_alignment_analysis.compute_syntactical_alignment import get_syntactical_alignment
 from linguistic_alignment_analysis.preprocessing_all import run_preprocessing
 import pickle
+import os
 
 
 __threaded_data__ = {}
@@ -37,7 +38,7 @@ def store_data(data, path):
     :param data: data to pickle
     :param path: path where to store the data
     """
-    print_t('Pickling data to ', path)
+    print_t('Pickling data to ' + str(path))
     store_file = open(path, 'ab')
     pickle.dump(data, store_file)
     store_file.close()
@@ -77,6 +78,7 @@ def get_preprocessed_data_from_pickle():
     """
     print_t('Getting preprocessed data')
     global __threaded_data__, __linear_data__
+
     __threaded_data__ = load_data(__pickle_path_preprocessed_tree__)
     __linear_data__ = load_data(__pickle_path_preprocessed_linear__)
     print_i('Got preprocessed data')
