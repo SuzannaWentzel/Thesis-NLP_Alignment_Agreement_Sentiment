@@ -159,6 +159,9 @@ def remove_0_overlap(discussions, avg_overlap_data_path):
     :param avg_overlap_data_path: path where to store the average overlap
     :return: discussions as list of objects with average of 0 overlap removed
     """
+
+    # {{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{{
+    # """
     # Run jaccard preprocessing
     print_t('preprocessing messages')
     preprocessed_messages = {}
@@ -218,6 +221,12 @@ def remove_0_overlap(discussions, avg_overlap_data_path):
     average_df.to_csv(avg_overlap_data_path)
     print_i('Computed averages')
 
+    # """
+    # [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
+
+    # average_df = read_csv(avg_overlap_data_path)
+    # ]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
+
     # Remove discussions with overlap of 0
     print_t('Removing 0 overlap discussions')
     discussion_0 = average_df[average_df['average_alignment'] == 0]
@@ -256,8 +265,16 @@ def run_preprocessing(datapath):
     :return: two lists of discussions as objects, for threads and for linear.
     """
     data = read_csv(datapath)
-    # data = data.loc[data['discussion_id'] == 1]
+    # [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
+    """
+    unique_discussions = data['discussion_id'].unique().tolist()
+    unique_discussions_shorter = unique_discussions[:50]
+    data_shorter = data[data['discussion_id'].isin(unique_discussions_shorter)]
+    discussion_posts = get_discusssion_posts(data_shorter)
+    """
+    # ]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]
     discussion_posts = get_discusssion_posts(data)
+    # }}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}}
     removed_empty = remove_empty_discussions(discussion_posts)
     replaced_urls = replace_urls(removed_empty)
 
