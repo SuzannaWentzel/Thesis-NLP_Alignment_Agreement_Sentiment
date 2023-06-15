@@ -3,6 +3,7 @@ from datetime import datetime
 
 from Models.Discussion import Discussion
 from Models.Post import Post
+import pickle
 
 
 def read_csv(path):
@@ -58,3 +59,16 @@ def object_to_df(objects):
     :param objects: list of discussion objects
     :return: discussion dataframe
     """
+
+
+def store_data(data, path):
+    """
+    Stores the preprocessed data as pickle to work faster
+    :param data: data to pickle
+    :param path: path where to store the data
+    """
+    print_t('Pickling data to ' + str(path))
+    store_file = open(path, 'ab')
+    pickle.dump(data, store_file)
+    store_file.close()
+    print_i('Pickled data')

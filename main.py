@@ -14,18 +14,21 @@ __threaded_data__ = {}
 __linear_data__ = {}
 
 # __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv'
-__datapath__ = './Data/discussion_post_text_date_author_parents_unfiltered.csv'
+# __datapath__ = './Data/discussion_post_text_date_author_parents_unfiltered.csv'
+__datapath__ = './Data/dummy_data.csv'
 
 __pickle_path_preprocessed_linear__ = './PickleData/preprocessed_linear'
 __pickle_path_preprocessed_tree__ = './PickleData/preprocessed_tree'
-__pickle_path_preprocessed_for_lexical_word_thread__ = './PickleData/preprocessed_lexical_word'
+__pickle_path_preprocessed_for_lexical_word_thread__ = './PickleData/preprocessed_lexical_word_thread'
 __pickle_path_preprocessed_for_lexical_word_linear__ = './PickleData/preprocessed_lexical_word_linear'
 __pickle_path_preprocessed_for_semantic_linear__ = 'PickleData/preprocessed_semantic_linear'
 __pickle_path_preprocessed_for_semantic_thread__ = 'PickleData/preprocessed_semantic_thread'
-__pickle_path_df_lexical_word_preprocessed_thread__ = './PickleData/preprocessed_df_lexical_word_thread.csv' # TODO: change this file type
-__pickle_path_df_lexical_word_preprocessed_linear__ = './PickleData/preprocessed_df_lexical_word_linear.csv' # TODO: change this file type
+__pickle_path_df_lexical_word_preprocessed_thread__ = './PickleData/preprocessed_df_lexical_word_thread' # TODO: change this file type
+__pickle_path_df_lexical_word_preprocessed_linear__ = './PickleData/preprocessed_df_lexical_word_linear' # TODO: change this file type
 __pickle_path_preprocessed_author_data_linear__ = './PickleData/preprocessed_author_data_linear'
 __pickle_path_preprocessed_author_data_thread__ = './PickleData/preprocessed_author_data_thread'
+__pickle_path_lexical_word_normed_vals_linear__ = './PickleData/lexical_word_normed_vals_linear'
+__pickle_path_lexical_word_normed_vals_thread__ = './PickleData/lexical_word_normed_vals_thread'
 __csv_lexical_word_alignment_thread__ = './AlignmentData/lexical_word_alignment.csv'
 __csv_lexical_word_alignment_linear__ = './AlignmentData/lexical_word_alignment_linear.csv'
 __csv_semantic_alignment_thread__ = './AlignmentData/semantic_alignment_thread.csv'
@@ -51,12 +54,12 @@ def load_data(path):
     :param path: path where pickle is stored
     :return: data from pickle
     """
-    print_t('Loading preprocessed data from pickle path', path)
+    print_t('Loading preprocessed data from pickle path ' + str(path))
     store_file = open(path, 'rb')
-    discussion = pickle.load(store_file)
+    data = pickle.load(store_file)
     store_file.close()
     print_i('Loaded data from pickle')
-    return discussion
+    return data
 
 
 def get_preprocessed_data():
@@ -81,6 +84,9 @@ def get_preprocessed_data_from_pickle():
 
     __threaded_data__ = load_data(__pickle_path_preprocessed_tree__)
     __linear_data__ = load_data(__pickle_path_preprocessed_linear__)
+
+    print_i(f'Len threaded data: {len(__threaded_data__)}')
+    print_i(f'Len linear data: {len(__linear_data__)}')
     print_i('Got preprocessed data')
 
 
@@ -96,9 +102,6 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
     print_t('Getting lexical word alignment')
     global __threaded_data__, __linear_data__
 
-    # __threaded_data__ = {1: __threaded_data__[1] }
-    # __linear_data__ = {1: __linear_data__[1] }
-
     if get_linear:
         print_t('Getting linear lexical word alignment')
         # Get linear lexical word alignment
@@ -112,7 +115,7 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
 
         if not alignment_ran:
             # run alignment
-            alignment_linear_df = compute_lexical_word_alignment(__linear_data__, preprocessed_lexical_word_linear, __csv_lexical_word_alignment_linear__, __pickle_path_preprocessed_author_data_linear__)
+            alignment_linear_df = compute_lexical_word_alignment(__linear_data__, preprocessed_lexical_word_linear, __csv_lexical_word_alignment_linear__, __pickle_path_preprocessed_author_data_linear__, __pickle_path_lexical_word_normed_vals_linear__)
         else:
             # load alignment
             alignment_linear_df = read_csv(__csv_lexical_word_alignment_linear__)
@@ -133,7 +136,7 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
 
         if not alignment_ran:
             # run alignment
-            alignment_threaded_df = compute_lexical_word_alignment(__threaded_data__, preprocessed_lexical_word_thread, __csv_lexical_word_alignment_thread__, __pickle_path_preprocessed_author_data_thread__)
+            alignment_threaded_df = compute_lexical_word_alignment(__threaded_data__, preprocessed_lexical_word_thread, __csv_lexical_word_alignment_thread__, __pickle_path_preprocessed_author_data_thread__, __pickle_path_lexical_word_normed_vals_thread__)
         else:
             # load alignment
             alignment_threaded_df = read_csv(__csv_lexical_word_alignment_thread__)
@@ -206,5 +209,5 @@ def get_semantical_alignment(semantic_preprocessed=True, alignment_ran=True, get
 
 get_preprocessed_data()
 # get_preprocessed_data_from_pickle()
-# get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=False, get_linear=True, get_thread=True)
+get_lexical_word_alignment(lexical_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)
 # get_syntactical_alignment(semantic_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)
