@@ -357,6 +357,9 @@ def get_author_stats():
 
     # data_df = pd.DataFrame(data, columns=['discussion_length', 'no_authors', 'no_discussions'])
 
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
+
+
     print('plotting graphs')
     # data_df_pivot = empty_df.pivot(columns="discussion_length", index="no_authors")
     print(empty_df)
@@ -364,20 +367,35 @@ def get_author_stats():
     norm_factor = empty_df.sum()
     data_df_pivot_normed = empty_df / norm_factor
 
-    fig = plt.figure(dpi=300, figsize=(9.5, 2))
-    cs = plt.pcolormesh(data_df_pivot_normed.values, norm="log", cmap="jet")
-    ax = plt.gca()
-    fig = plt.gcf()
+    # fig = plt.figure(dpi=300, figsize=(9.5, 2.5))
+    cs1 = ax1.pcolormesh(empty_df.values, norm="log", cmap="jet")
+    cs2 = ax2.pcolormesh(data_df_pivot_normed.values, norm="log", cmap="jet")
+    cs3 = ax3.pcolormesh(data_df_pivot_normed.values, norm="log", cmap="jet")
+
     # fig.set_figheight(10)
     # ax.axis('equal')
-    bar = plt.colorbar(cs, shrink=0.6, aspect=5)
-    ax.set_aspect('equal', 'box')
-    ax.set_ylabel('# of authors')
-    ax.set_xlabel('Discussion length')
-    plt.suptitle('Author contribution')
+    fig.colorbar(cs1, ax=ax1, shrink=0.4, aspect=5)
+    fig.colorbar(cs2, ax=ax2, shrink=0.4, aspect=5)
+    fig.colorbar(cs3, ax=ax3, shrink=0.4, aspect=5)
+
+    ax1.set_aspect('equal', 'box')
+    ax1.set_xlim((0, 1300))
+    ax1.set_ylim((0, 160))
+
+    ax2.set_aspect('equal', 'box')
+    ax2.set_ylabel('# of authors')
+    ax2.set_xlim((0, 1300))
+    ax2.set_ylim((0, 160))
+
+    ax3.set_aspect('equal', 'box')
+    ax3.set_xlabel('Discussion length')
+    ax3.set_xlim((0, 325))
+    ax3.set_ylim((0, 40))
     # ax.set(xlim=(0, 1300), ylim=(0, 160))
+
+    plt.suptitle('Author contribution')
     plt.tight_layout()
-    plt.savefig('Results/DataStats/AuthorStats/author_contribution_heat.png')
+    plt.savefig('Results/DataStats/AuthorStats/author_contribution_heat_combined.png')
     # plt.show()
 
     """
@@ -485,5 +503,5 @@ def get_max_thread_stats():
 # get_message_length_stats(df)
 # get_discussion_length_stats()
 # get_overlap_stats()
-# get_author_stats()
-get_max_thread_stats()
+get_author_stats()
+# get_max_thread_stats()
