@@ -116,6 +116,16 @@ def jaccard_overlap(initial_message, response_message):
     return jaccard
 
 
+def adapted_LLA(initial_message, response_message):
+    """
+    Alignment function: adapted LLA
+    :param initial_message: list of lemmas of initial message
+    :param response_message: list of lemmas of response message
+    :return: adapted LLA
+    """
+    w_in_R_in_I = [lemma for lemma in response_message if lemma in initial_message]
+    return len(w_in_R_in_I) / len(response_message)
+
 
 def get_data_per_author(df):
     """
@@ -486,6 +496,7 @@ def get_overall_histogram_lexical_word_alignment_stacked(df, path):
 # jaccard_overlap(['a', 'b', 'c', 'd'], ['e', 'f', 'a'])
 # jaccard_overlap(['a', 'b', 'c', 'd', 'g', 'h', 'i', 'j', 'k', 'l', 'm'], ['e', 'f', 'a'])
 
-
+# print(jaccard_overlap(['a', 'b', 'c', 'd'], ['x', 'y', 'z', 'a']))
+# print(jaccard_overlap(['a', 'b', 'c', 'd'], ['a', 'q', 'r', 's', 'x', 'y', 'a', 'z']))
 
 

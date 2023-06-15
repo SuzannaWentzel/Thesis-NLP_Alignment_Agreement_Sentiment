@@ -4,8 +4,11 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 from matplotlib.ticker import MaxNLocator
 import numpy as np
-from linguistic_alignment_analysis.compute_lexical_word_alignment import jaccard_overlap, preprocess_message_lexical_word
-from linguistic_alignment_analysis.preprocessing_all import run_preprocessing
+from linguistic_alignment_analysis.compute_lexical_word_alignment import jaccard_overlap, \
+    preprocess_message_lexical_word, adapted_LLA
+from linguistic_alignment_analysis.preprocessing_all import run_preprocessing, get_discusssion_posts, \
+    remove_empty_discussions, replace_urls, get_discussion_threads, merge_consecutive_messages, \
+    get_discussion_linear_threads
 import copy
 
 
@@ -28,10 +31,12 @@ __max_thread_histo_thread__ = './Results/DataStats/histo_max_thread_thread.png'
 
 
 
-def get_message_length_stats(discussions):
+def get_message_length_stats():
     """
     Get message statistics
     """
+    discussions = read_csv(__datapath__)
+
     length_of_the_messages = discussions["text"].str.split("\\s+")
     print('Average length of messages:', length_of_the_messages.str.len().mean())
     print('Min number of words: ', length_of_the_messages.str.len().min())
@@ -155,7 +160,8 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
                 initial_post_id = post.thread[k]
                 initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
                 initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
-                alignment = jaccard_overlap(initial_preprocessed, response_preprocessed)
+                # alignment = jaccard_overlap(initial_preprocessed, response_preprocessed)
+                alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
                 distance = len(post.thread) - k
                 data.append([
                     discussion.discussion_id,
@@ -270,26 +276,46 @@ def get_average(discussions_df, path):
     return average_df
 
 
+def run_preprocessing_for_overlap_stats(datapath):
+    """
+    Running the preprocessing on a csv containing all discussions, posts, date, author, parent post etc for stats, without outliers removed.
+    :param datapath: path where the csv data is read from
+    :return: two lists of discussions as objects, for threads and for linear.
+    """
+    data = read_csv(datapath)
+    discussion_posts = get_discusssion_posts(data)
+    removed_empty = remove_empty_discussions(discussion_posts)
+    replaced_urls = replace_urls(removed_empty)
+
+    threads = get_discussion_threads(replaced_urls)
+    threads_consecutive_merged = merge_consecutive_messages(threads)
+
+    linear = get_discussion_linear_threads(copy.deepcopy(replaced_urls))
+    linear_consecutive_merged = merge_consecutive_messages(linear)
+    return threads_consecutive_merged, linear_consecutive_merged
+
+
+
 def get_overlap_stats():
     """
     Main function for getting the discussion data and redirecting to obtain overlap statistics
     """
 
-    # threads_discussions, linear_discussions = run_preprocessing(__datapath__)
-    # preprocessed_thread, preprocessed_linear = get_preprocessed_overlap(threads_discussions, __preprocessed_messages_thread__), get_preprocessed_overlap(linear_discussions, __preprocessed_messages_linear__)
-    # alignment_thread = compute_lexical_word_alignment(threads_discussions, preprocessed_thread, __alignment_thread__)  # thread
-    # alignment_linear = compute_lexical_word_alignment(linear_discussions, preprocessed_linear, __alignment_linear__) # linear
+    threads_discussions, linear_discussions = run_preprocessing_for_overlap_stats(__datapath__)
+    preprocessed_thread, preprocessed_linear = get_preprocessed_overlap(threads_discussions, __preprocessed_messages_thread__), get_preprocessed_overlap(linear_discussions, __preprocessed_messages_linear__)
+    alignment_thread = compute_lexical_word_alignment(threads_discussions, preprocessed_thread, __alignment_thread__)  # thread
+    alignment_linear = compute_lexical_word_alignment(linear_discussions, preprocessed_linear, __alignment_linear__) # linear
 
     # load alignment data
     # alignment_thread = read_csv(__alignment_thread__)
     # alignment_linear = read_csv(__alignment_linear__)
     #
-    # average_thread = get_average(alignment_thread, __avg_alignment_thread__)
-    # average_linear = get_average(alignment_linear, __avg_alignment_linear__)
+    average_thread = get_average(alignment_thread, __avg_alignment_thread__)
+    average_linear = get_average(alignment_linear, __avg_alignment_linear__)
 
     # load avg alignment data
-    average_thread = read_csv(__avg_alignment_thread__)
-    average_linear = read_csv(__avg_alignment_linear__)
+    # average_thread = read_csv(__avg_alignment_thread__)
+    # average_linear = read_csv(__avg_alignment_linear__)
 
     print('threaded data:')
     get_alignment_stats(average_thread, __discussion_alignment_histo_thread__)
@@ -482,8 +508,8 @@ def get_max_thread_stats():
 
 
 
-# get_message_length_stats(df)
+# get_message_length_stats()
 # get_discussion_length_stats()
-# get_overlap_stats()
+get_overlap_stats()
 # get_author_stats()
-get_max_thread_stats()
+# get_max_thread_stats()
