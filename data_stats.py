@@ -15,6 +15,7 @@ import copy
 
 # __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv' #use the unfiltered csv for original data
 __datapath__ = './Data/discussion_post_text_date_author_parents_unfiltered.csv'
+__datapath__filtered = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_four_posts.csv'
 __discussion_length_histo_path__ = './Results/DataStats/discussion_length_histo.png'
 __preprocessed_messages_linear__ = './Results/DataStats/TempStorage/pickle_preprocessed_linear'
 __preprocessed_messages_thread__ = './Results/DataStats/TempStorage/pickle_preprocessed_thread'
@@ -188,7 +189,7 @@ def get_alignment_stats(discussion_df, storage_path):
     """
 
 
-    """
+    # """
     print('mean: \t', discussion_df['average_alignment'].mean())
     print('median: \t', discussion_df['average_alignment'].median())
     print('min: \t', discussion_df['average_alignment'].min())
@@ -200,23 +201,23 @@ def get_alignment_stats(discussion_df, storage_path):
     fig.suptitle('Average overlap between posts')
     fig.subplots_adjust(hspace=0.5)
 
-    ax1.set_xlim(0, 0.5)
+    ax1.set_xlim(0, 1)
     # ax1.set_ylim(0, 5000)
-    ax2.set_xlim(0, 0.5)
+    ax2.set_xlim(0, 1)
     ax2.set_yscale('log')
     ax2.set_ylabel('# discussions')
     ax3.set_xlim(0, 0.01)
     # ax3.set_ylim(0, 500)
-    ax3.set_xlabel('Jaccard Similarity')
+    ax3.set_xlabel('Adapted LLA')
     # ax.set_ylim(0, 100000) #2500000 for linear
 
     # for ax in fig.get_axes():
     #     ax.set_xlabel('# posts')
     #     ax.set_ylabel('# discussions')
 
-    ax1.hist(discussion_df['average_alignment'], bins=np.arange(0, 0.5, 0.01),
+    ax1.hist(discussion_df['average_alignment'], bins=np.arange(0, 1, 0.01),
              color='#d74a94')  # color='#d74a94'  histtype='step'
-    ax2.hist(discussion_df['average_alignment'], bins=np.arange(0, 0.5, 0.01),
+    ax2.hist(discussion_df['average_alignment'], bins=np.arange(0, 1, 0.01),
              color='#d74a94')  # color='#d74a94'  histtype='step'
     ax3.hist(discussion_df['average_alignment'], bins=np.arange(0, 0.01, 0.001),
              color='#d74a94')  # color='#d74a94'  histtype='step'
@@ -224,10 +225,13 @@ def get_alignment_stats(discussion_df, storage_path):
     fig.savefig(storage_path)
     fig.show()
 
-    """
+    # """
 
-    """
+    # """
     discussion_0 = discussion_df[discussion_df['average_alignment'] == 0]
+    sample_discussion_0 = discussion_0.sample(n=10, random_state=1)
+    print('Random sample of discussions with alignment of 0', sample_discussion_0.to_string())
+
     discussion_001 = discussion_df[(discussion_df['average_alignment'] > 0) & (discussion_df['average_alignment'] < 0.01) ]
     sample_discussion_001 = discussion_001.sample(n=10, random_state=1)
     print('Random sample of discussions with alignment between 0 and 0.01: ', sample_discussion_001.to_string())
@@ -245,7 +249,7 @@ def get_alignment_stats(discussion_df, storage_path):
     print('amount of discussions in spikes: ', len(discussion_spikes))
     print('alignment spikes: ', discussion_spikes.to_string())
     
-    """
+    # """
 
 
 def get_average(discussions_df, path):
@@ -301,7 +305,7 @@ def get_overlap_stats():
     Main function for getting the discussion data and redirecting to obtain overlap statistics
     """
 
-    threads_discussions, linear_discussions = run_preprocessing_for_overlap_stats(__datapath__)
+    threads_discussions, linear_discussions = run_preprocessing_for_overlap_stats(__datapath__filtered)
     preprocessed_thread, preprocessed_linear = get_preprocessed_overlap(threads_discussions, __preprocessed_messages_thread__), get_preprocessed_overlap(linear_discussions, __preprocessed_messages_linear__)
     alignment_thread = compute_lexical_word_alignment(threads_discussions, preprocessed_thread, __alignment_thread__)  # thread
     alignment_linear = compute_lexical_word_alignment(linear_discussions, preprocessed_linear, __alignment_linear__) # linear
