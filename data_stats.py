@@ -29,6 +29,7 @@ __max_thread_linear__ = './Results/DataStats/TempStorage/df_max_thread_linear.cs
 __max_thread_thread__ = './Results/DataStats/TempStorage/df_max_thread_thread.csv'
 __max_thread_histo_linear__ = './Results/DataStats/histo_max_thread_linear.png'
 __max_thread_histo_thread__ = './Results/DataStats/histo_max_thread_thread.png'
+__author_histo__ = './Results/DataStats/histo_author.png'
 
 
 
@@ -52,7 +53,7 @@ def get_discussion_length_stats():
     """
     Gets discussion length statistics (with histogram for distributions and percentile)
     """
-    discussions = read_csv(__datapath__)
+    discussions = read_csv(__datapath__filtered)
 
     discussion_list = []
     discussion_indices = discussions['discussion_id'].unique()
@@ -77,12 +78,12 @@ def get_discussion_length_stats():
     fig.subplots_adjust(hspace=0.5)
 
     ax1.set_xlim(0, 1300)
-    ax1.set_ylim(0, 5000)
+    ax1.set_ylim(0, 1100)
     ax2.set_xlim(0, 1300)
     ax2.set_yscale('log')
     ax2.set_ylabel('# discussions')
-    ax3.set_xlim(0, 20)
-    ax3.set_ylim(0, 1000)
+    ax3.set_xlim(8, 20)
+    ax3.set_ylim(0, 250)
     ax3.set_xlabel('# posts')
     # ax.set_ylim(0, 100000) #2500000 for linear
 
@@ -90,9 +91,9 @@ def get_discussion_length_stats():
     #     ax.set_xlabel('# posts')
     #     ax.set_ylabel('# discussions')
 
-    ax1.hist(discussion_df['discussion_length'], bins=np.arange(0, 1300, 10), color='#d74a94')  # color='#d74a94'  histtype='step'
-    ax2.hist(discussion_df['discussion_length'], bins=np.arange(0, 1300, 10), color='#d74a94')  # color='#d74a94'  histtype='step'
-    ax3.hist(discussion_df['discussion_length'], bins=np.arange(0, 1300, 1), color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax1.hist(discussion_df['discussion_length'], bins=np.arange(8, 1300, 10), color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax2.hist(discussion_df['discussion_length'], bins=np.arange(8, 1300, 10), color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax3.hist(discussion_df['discussion_length'], bins=np.arange(8, 21, 1), color='#d74a94')  # color='#d74a94'  histtype='step'
 
     fig.savefig(__discussion_length_histo_path__)
     fig.show()
@@ -330,16 +331,78 @@ def get_overlap_stats():
 
 def get_author_stats():
     """
-    Obtains author statistics, heatmap
+    Obtains author statistics, histogram
+    """
+    discussions = read_csv(__datapath__filtered)
+
+    print('# unique authors', len(discussions['author_id'].unique()))
+
+    auth_list = []
+    discussion_indices = discussions['discussion_id'].unique()
+    for i in discussion_indices:
+        print('Getting data', i)
+        discussion_df = discussions.loc[discussions['discussion_id'] == i]
+        no_authors = len(discussion_df['author_id'].unique())
+
+        auth_list.append([
+            i,
+            no_authors
+        ])
+
+    author_discussion_df = pd.DataFrame(auth_list, columns=['discussion_id', 'no_authors'])
+    print(author_discussion_df)
+
+    print('mean: \t', author_discussion_df['no_authors'].mean())
+    print('median: \t', author_discussion_df['no_authors'].median())
+    print('min: \t', author_discussion_df['no_authors'].min())
+    print('max: \t', author_discussion_df['no_authors'].max())
+    print('percentiles: \t', author_discussion_df['no_authors'].describe(percentiles=[.01, .05, .1, .9, .95, .99, .995, 1]))
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
+
+    fig.suptitle('Number of authors in discussions')
+    fig.subplots_adjust(hspace=0.5)
+
+    ax1.set_xlim(2, 160)
+    # ax1.set_ylim(0, 5000)
+    ax2.set_xlim(2, 160)
+    ax2.set_yscale('log')
+    ax2.set_ylabel('# discussions')
+    ax3.set_xlim(2, 20)
+    # ax3.set_ylim(0, 500)
+    ax3.set_xlabel('# authors')
+    # ax.set_ylim(0, 100000) #2500000 for linear
+
+    # for ax in fig.get_axes():
+    #     ax.set_xlabel('# posts')
+    #     ax.set_ylabel('# discussions')
+
+    ax1.hist(author_discussion_df['no_authors'], bins=np.arange(2, 160, 2),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax2.hist(author_discussion_df['no_authors'], bins=np.arange(2, 160, 2),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax3.hist(author_discussion_df['no_authors'], bins=np.arange(2, 21, 1),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+
+    fig.savefig(__author_histo__)
+    fig.show()
+
+
+
+
+def get_author_contri_stats():
+    """
+    Obtains author contribution statistics, heatmap
     """
 
-    discussions = read_csv(__datapath__)
+    discussions = read_csv(__datapath__filtered)
 
     print('# unique discussion', len(discussions['discussion_id'].unique()))
     print('# unique authors', len(discussions['author_id'].unique()))
 
     len_list = []
     discussion_indices = discussions['discussion_id'].unique()
+    auth_post_list = []
     for i in discussion_indices:
         print('Getting data', i)
         discussion_df = discussions.loc[discussions['discussion_id'] == i]
@@ -352,7 +415,25 @@ def get_author_stats():
             no_authors
         ])
 
+        author_indices = discussion_df['author_id'].unique()
+        for a in author_indices:
+            author_df = discussion_df.loc[discussions['author_id'] == a]
+            no_posts = len(author_df)
+            auth_post_list.append([
+                i,
+                a,
+                no_posts
+            ])
+
     len_discussion_df = pd.DataFrame(len_list, columns=['discussion_id', 'discussion_length', 'no_authors'])
+    auth_post_df = pd.DataFrame(auth_post_list, columns=['discussion_id', 'author_id', 'no_posts'])
+
+    print('mean: \t', auth_post_df['no_posts'].mean())
+    print('median: \t', auth_post_df['no_posts'].median())
+    print('min: \t', auth_post_df['no_posts'].min())
+    print('max: \t', auth_post_df['no_posts'].max())
+    print('percentiles: \t', auth_post_df['no_posts'].describe(percentiles=[.01, .05, .1, .9, .95, .99, .995, 1]))
+
 
     # x = []
     # y = []
@@ -392,8 +473,7 @@ def get_author_stats():
 
     print('plotting graphs')
     # data_df_pivot = empty_df.pivot(columns="discussion_length", index="no_authors")
-    print(empty_df)
-    print(empty_df.values)
+
     norm_factor = empty_df.sum()
     data_df_pivot_normed = empty_df / norm_factor
 
@@ -532,6 +612,7 @@ def get_max_thread_stats():
 
 # get_message_length_stats()
 # get_discussion_length_stats()
-get_overlap_stats()
+# get_overlap_stats()
 # get_author_stats()
+get_author_contri_stats()
 # get_max_thread_stats()
