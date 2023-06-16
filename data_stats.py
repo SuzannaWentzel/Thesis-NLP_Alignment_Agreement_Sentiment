@@ -206,7 +206,7 @@ def get_alignment_stats(discussion_df, storage_path):
     ax2.set_xlim(0, 1)
     ax2.set_yscale('log')
     ax2.set_ylabel('# discussions')
-    ax3.set_xlim(0, 0.01)
+    ax3.set_xlim(0.01, 0.03)
     # ax3.set_ylim(0, 500)
     ax3.set_xlabel('Adapted LLA')
     # ax.set_ylim(0, 100000) #2500000 for linear
@@ -219,7 +219,7 @@ def get_alignment_stats(discussion_df, storage_path):
              color='#d74a94')  # color='#d74a94'  histtype='step'
     ax2.hist(discussion_df['average_alignment'], bins=np.arange(0, 1, 0.01),
              color='#d74a94')  # color='#d74a94'  histtype='step'
-    ax3.hist(discussion_df['average_alignment'], bins=np.arange(0, 0.01, 0.001),
+    ax3.hist(discussion_df['average_alignment'], bins=np.arange(0, 0.04, 0.001),
              color='#d74a94')  # color='#d74a94'  histtype='step'
 
     fig.savefig(storage_path)
@@ -228,24 +228,23 @@ def get_alignment_stats(discussion_df, storage_path):
     # """
 
     # """
-    discussion_0 = discussion_df[discussion_df['average_alignment'] == 0]
-    sample_discussion_0 = discussion_0.sample(n=10, random_state=1)
-    print('Random sample of discussions with alignment of 0', sample_discussion_0.to_string())
+    discussion_low = discussion_df[discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.005)]
+    sample_discussion_low = discussion_low.sample(n=10, random_state=1)
+    print('Random sample of discussions with low alignment', sample_discussion_low.to_string())
 
-    discussion_001 = discussion_df[(discussion_df['average_alignment'] > 0) & (discussion_df['average_alignment'] < 0.01) ]
-    sample_discussion_001 = discussion_001.sample(n=10, random_state=1)
-    print('Random sample of discussions with alignment between 0 and 0.01: ', sample_discussion_001.to_string())
+    discussion_above_low = discussion_df[(discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.005)) & (discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.01))]
+    sample_discussion_above_low = discussion_above_low.sample(n=10, random_state=1)
+    print('Random sample of discussions with alignment a little higher: ', sample_discussion_above_low.to_string())
     
     discussion_995 = discussion_df[discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.995)]
-    print('Length of last 0.05th percentile: ', len(discussion_995))
     sample_discussion_995 = discussion_995.sample(n=10, random_state=1)
     print('Random sample of discussions with alignment in last 0.05th percentile: ', sample_discussion_995.to_string())
 
     discussion_50 = discussion_df[(discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.51)) & (discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.49))]
     sample_discussion_50 = discussion_50.sample(n=10, random_state=1)
-    print('Random sample of discussions with alignment at median:', sample_discussion_50)
+    print('Random sample of discussions with alignment at median:', sample_discussion_50.to_string())
     
-    discussion_spikes = discussion_df[discussion_df['average_alignment'] > 0.2]
+    discussion_spikes = discussion_df[discussion_df['average_alignment'] > 0.375]
     print('amount of discussions in spikes: ', len(discussion_spikes))
     print('alignment spikes: ', discussion_spikes.to_string())
     
@@ -291,12 +290,9 @@ def run_preprocessing_for_overlap_stats(datapath):
     removed_empty = remove_empty_discussions(discussion_posts)
     replaced_urls = replace_urls(removed_empty)
 
-    threads = get_discussion_threads(replaced_urls)
-    threads_consecutive_merged = merge_consecutive_messages(threads)
-
     linear = get_discussion_linear_threads(copy.deepcopy(replaced_urls))
     linear_consecutive_merged = merge_consecutive_messages(linear)
-    return threads_consecutive_merged, linear_consecutive_merged
+    return linear_consecutive_merged
 
 
 
@@ -305,24 +301,19 @@ def get_overlap_stats():
     Main function for getting the discussion data and redirecting to obtain overlap statistics
     """
 
-    threads_discussions, linear_discussions = run_preprocessing_for_overlap_stats(__datapath__filtered)
-    preprocessed_thread, preprocessed_linear = get_preprocessed_overlap(threads_discussions, __preprocessed_messages_thread__), get_preprocessed_overlap(linear_discussions, __preprocessed_messages_linear__)
-    alignment_thread = compute_lexical_word_alignment(threads_discussions, preprocessed_thread, __alignment_thread__)  # thread
-    alignment_linear = compute_lexical_word_alignment(linear_discussions, preprocessed_linear, __alignment_linear__) # linear
+    # linear_discussions = run_preprocessing_for_overlap_stats(__datapath__filtered)
+    # preprocessed_linear = get_preprocessed_overlap(linear_discussions, __preprocessed_messages_linear__)
+    # alignment_linear = compute_lexical_word_alignment(linear_discussions, preprocessed_linear, __alignment_linear__) # linear
 
     # load alignment data
     # alignment_thread = read_csv(__alignment_thread__)
     # alignment_linear = read_csv(__alignment_linear__)
     #
-    average_thread = get_average(alignment_thread, __avg_alignment_thread__)
-    average_linear = get_average(alignment_linear, __avg_alignment_linear__)
+    # average_linear = get_average(alignment_linear, __avg_alignment_linear__)
 
     # load avg alignment data
     # average_thread = read_csv(__avg_alignment_thread__)
-    # average_linear = read_csv(__avg_alignment_linear__)
-
-    print('threaded data:')
-    get_alignment_stats(average_thread, __discussion_alignment_histo_thread__)
+    average_linear = read_csv(__avg_alignment_linear__)
 
     print('linear data:')
     get_alignment_stats(average_linear, __discussion_alignment_histo_linear__)
