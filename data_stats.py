@@ -10,7 +10,7 @@ from linguistic_alignment_analysis.preprocessing_all import run_preprocessing, g
     remove_empty_discussions, replace_urls, get_discussion_threads, merge_consecutive_messages, \
     get_discussion_linear_threads
 import copy
-
+from collections import Counter
 
 
 # __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv' #use the unfiltered csv for original data
@@ -19,11 +19,16 @@ __datapath__filtered = './Data/discussion_post_text_date_author_parents_more_tha
 __discussion_length_histo_path__ = './Results/DataStats/discussion_length_histo.png'
 __preprocessed_messages_linear__ = './Results/DataStats/TempStorage/pickle_preprocessed_linear'
 __preprocessed_messages_thread__ = './Results/DataStats/TempStorage/pickle_preprocessed_thread'
-__alignment_linear__ = './Results/DataStats/TempStorage/df_alignment_linear'
+__alignment_linear__ = './Results/DataStats/TempStorage/df_alignment_linear' # Where currently adapted LLA is stored
+__alignment_linear_Jaccard__ = './Results/DataStats/TempStorage/df_alignment_linear_jaccard'
+__alignment_linear_SCP__ = './Results/DataStats/TempStorage/df_alignment_linear_SCP'
 __alignment_thread__ = './Results/DataStats/TempStorage/df_alignment_thread'
 __discussion_alignment_histo_linear__ = './Results/DataStats/discussion_alignment_histo_linear.png'
 __discussion_alignment_histo_thread__ = './Results/DataStats/discussion_alignment_histo_thread.png'
 __avg_alignment_linear__ = './Results/DataStats/TempStorage/df_avg_alignment_linear.csv'
+__avg_alignment_linear_LLA__ = './Results/DataStats/TempStorage/df_avg_alignment_linear_LLA.csv'
+__avg_alignment_linear_Jaccard__ = './Results/DataStats/TempStorage/df_avg_alignment_linear_Jaccard.csv'
+__avg_alignment_linear_SCP__ = './Results/DataStats/TempStorage/df_avg_alignment_linear_SCP.csv'
 __avg_alignment_thread__ = './Results/DataStats/TempStorage/df_avg_alignment_thread.csv'
 __max_thread_linear__ = './Results/DataStats/TempStorage/df_max_thread_linear.csv'
 __max_thread_thread__ = './Results/DataStats/TempStorage/df_max_thread_thread.csv'
@@ -162,8 +167,8 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
                 initial_post_id = post.thread[k]
                 initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
                 initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
-                # alignment = jaccard_overlap(initial_preprocessed, response_preprocessed)
-                alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
+                alignment = jaccard_overlap(initial_preprocessed, response_preprocessed)
+                # alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
                 distance = len(post.thread) - k
                 data.append([
                     discussion.discussion_id,
@@ -182,6 +187,145 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
     return df
 
 
+def compute_lexical_word_alignment_SCP(discussions, preprocessed_messages, path, preprocessed_df_path):
+    """
+    Computes the actual alignment for each message and each of it's parent messages
+    :param discussions: list of discussion objects
+    :param preprocessed_messages: object of preprocessed messages
+    :param path: path where to store the alignment dataframe
+    :param preprocessed_df_path: path where preprocessed df is stored
+    :return: dataframe with alignment
+    """
+    print_t('computing lexical word alignment for all messages and all of their parents')
+
+    df = pd.read_pickle(preprocessed_df_path)
+
+    print_t('Getting data per author')
+    unique_authors = df['author_id'].unique()
+    author_data = {}
+    for author in unique_authors:
+        df_author = df[df['author_id'] == author]
+        posts = []
+        preprocessed = []
+        for index, row in df_author.iterrows():
+            posts.append(row['preprocessed_text'])
+            preprocessed = preprocessed + row['preprocessed_text']
+        author_data[author] = {
+            'posts': posts,
+            'words': preprocessed
+        }
+    print_i('Task completed')
+
+    word_set = set()
+    for i in discussions.keys():
+        discussion = discussions[i]
+        print('discussion: ', i)
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            response_preprocessed_index = str(discussion.discussion_id) + '-' + str(post.post_id)
+            response_preprocessed = preprocessed_messages[response_preprocessed_index]
+            word_set.update(response_preprocessed)
+    unique_words = pd.Series(list(word_set))
+
+    # proportion of words in R that are w
+    # proportion of responses R by author i containing w
+    # proportion of words by author i that are m
+
+    print_t('initializing author lists and vars')
+    # Amount of posts
+    post_series = pd.Series(preprocessed_messages.keys())
+
+    # Amount of authors
+    author_series = pd.Series(author_data.keys())
+
+    dtype = pd.SparseDtype('float', np.nan)
+
+    a2 = pd.DataFrame(np.nan, post_series, unique_words)
+    b1 = pd.DataFrame(0, unique_words, author_series)
+    b2 = pd.DataFrame(0, unique_words, author_series)
+
+    a2.astype(dtype)
+    b1.astype(dtype)
+    b2.astype(dtype)
+
+    # init norm lists
+    b1_posts = pd.Series(np.nan, author_series)
+    b2_words = pd.Series(np.nan, author_series)
+    for a_idx in author_data.keys():
+        b1_posts[a_idx] = len(author_data[a_idx]['posts'])
+        b2_words[a_idx] = len(author_data[a_idx]['words'])
+    print_i('Author lists initialized')
+
+    # Fill the counts
+    print_t('Computing counts')
+    for i in discussions.keys():
+        discussion = discussions[i]
+        print('discussion: ', i)
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            post_idx = str(discussion.discussion_id) + '-' + str(post.post_id)
+            post_preprocessed = preprocessed_messages[post_idx]
+            word_counter = Counter(post_preprocessed)
+            len_post = len(post_preprocessed)
+            for k in post_preprocessed:
+                a2.at[post_idx, k] = word_counter[k] / len_post
+                b1.at[k, post.username] += 1
+                b2.at[k, post.username] += word_counter[k]
+    print_i('Counts computed')
+
+    # compute the fractions
+    b1 = b1 / b1_posts
+    b2 = b2 / b2_words
+
+    # Init weight
+    w1 = 0.5
+    w2 = 0.5
+
+    print_t('Computing alignment')
+    alignment_data = []
+    for i in discussions.keys():
+        discussion = discussions[i]
+        print_i(f'Discussion: {i} out of {len(discussions.keys())}')
+        for j in discussion.posts.keys():
+            post_response = discussion.posts[j]
+            post_idx = f'{i}-{j}'
+            post_response_preprocessed = preprocessed_messages[post_idx]
+            for k in range(0, len(post_response.thread)):
+                post_initial_id = post_response.thread[k]
+                post_initial_preprocessed = preprocessed_messages[f'{i}-{post_initial_id}']
+
+                alignments = []
+                for w in post_response_preprocessed:
+                    a1_waarde = int(w in post_initial_preprocessed)
+                    a2_waarde = a2.at[post_idx, w]
+                    b1_waarde = b1.at[w, post_response.username]
+                    b2_waarde = b2.at[w, post_response.username]
+
+                    scaled_SCP_w = ((a1_waarde * w1) + (a2_waarde * w2)) - ((b1_waarde * w1) + (b2_waarde * w2))
+                    alignments.append(scaled_SCP_w)
+
+                average_alignment = np.mean(alignments)
+                distance = len(post_response.thread) - k
+                alignment_data.append([
+                    discussion.discussion_id,
+                    post_initial_id,
+                    post_response.post_id,
+                    distance,
+                    average_alignment
+                ])
+
+    print_i('computed alignment')
+
+    print_t('storing alignment data')
+    df = pd.DataFrame(alignment_data, columns=['discussion_id', 'initial_message_id', 'response_message_id', 'distance', 'lexical_word_alignment'])
+    df.to_csv(path)
+    print_i('task completed')
+
+    return df
+
+
+
+
 def get_alignment_stats(discussion_df, storage_path):
     """
     Gets overlap statistics, histograms and percentile data
@@ -197,31 +341,32 @@ def get_alignment_stats(discussion_df, storage_path):
     print('max: \t', discussion_df['average_alignment'].max())
     print('percentiles: \t', discussion_df['average_alignment'].describe(percentiles=[.01, .05, .1, .9, .95, .99, .995, 1]))
 
-    fig, (ax1, ax2, ax3) = plt.subplots(3)
+    # fig, (ax1, ax2, ax3) = plt.subplots(3)
+    fig, (ax1, ax2) = plt.subplots(2)
 
     fig.suptitle('Average overlap between posts')
     fig.subplots_adjust(hspace=0.5)
 
-    ax1.set_xlim(0, 1)
+    ax1.set_xlim(-1, 1)
     # ax1.set_ylim(0, 5000)
-    ax2.set_xlim(0, 1)
+    ax2.set_xlim(-1, 1)
     ax2.set_yscale('log')
     ax2.set_ylabel('# discussions')
-    ax3.set_xlim(0.01, 0.03)
+    # ax3.set_xlim(0.3, 0.65)
     # ax3.set_ylim(0, 500)
-    ax3.set_xlabel('Adapted LLA')
+    ax2.set_xlabel('Adapted LLA')
     # ax.set_ylim(0, 100000) #2500000 for linear
 
     # for ax in fig.get_axes():
     #     ax.set_xlabel('# posts')
     #     ax.set_ylabel('# discussions')
 
-    ax1.hist(discussion_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+    ax1.hist(discussion_df['average_alignment'], bins=np.arange(-1, 1, 0.01),
              color='#d74a94')  # color='#d74a94'  histtype='step'
-    ax2.hist(discussion_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+    ax2.hist(discussion_df['average_alignment'], bins=np.arange(-1, 1, 0.01),
              color='#d74a94')  # color='#d74a94'  histtype='step'
-    ax3.hist(discussion_df['average_alignment'], bins=np.arange(0, 0.04, 0.001),
-             color='#d74a94')  # color='#d74a94'  histtype='step'
+    # ax3.hist(discussion_df['average_alignment'], bins=np.arange(0.3, 0.65, 0.005),
+    #          color='#d74a94')  # color='#d74a94'  histtype='step'
 
     fig.savefig(storage_path)
     fig.show()
@@ -229,27 +374,33 @@ def get_alignment_stats(discussion_df, storage_path):
     # """
 
     # """
-    discussion_low = discussion_df[discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.005)]
-    sample_discussion_low = discussion_low.sample(n=10, random_state=1)
-    print('Random sample of discussions with low alignment', sample_discussion_low.to_string())
+    # discussion_low = discussion_df[discussion_df['average_alignment'] == 0]
+    # sample_discussion_low = discussion_low.sample(n=10, random_state=1)
+    # print('Random sample of discussions with low alignment', sample_discussion_low.to_string())
 
-    discussion_above_low = discussion_df[(discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.005)) & (discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.01))]
-    sample_discussion_above_low = discussion_above_low.sample(n=10, random_state=1)
-    print('Random sample of discussions with alignment a little higher: ', sample_discussion_above_low.to_string())
+    # discussion_above_low = discussion_df[(discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.005)) & (discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.01))]
+    # sample_discussion_above_low = discussion_above_low.sample(n=10, random_state=1)
+    # print('Random sample of discussions with alignment a little higher: ', sample_discussion_above_low.to_string())
     
-    discussion_995 = discussion_df[discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.995)]
-    sample_discussion_995 = discussion_995.sample(n=10, random_state=1)
-    print('Random sample of discussions with alignment in last 0.05th percentile: ', sample_discussion_995.to_string())
+    # discussion_995 = discussion_df[discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.995)]
+    # sample_discussion_995 = discussion_995.sample(n=10, random_state=1)
+    # print('Random sample of discussions with alignment in last 0.05th percentile: ', sample_discussion_995.to_string())
 
-    discussion_50 = discussion_df[(discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.51)) & (discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.49))]
-    sample_discussion_50 = discussion_50.sample(n=10, random_state=1)
-    print('Random sample of discussions with alignment at median:', sample_discussion_50.to_string())
+    # discussion_50 = discussion_df[(discussion_df['average_alignment'] < discussion_df['average_alignment'].quantile(.51)) & (discussion_df['average_alignment'] > discussion_df['average_alignment'].quantile(.49))]
+    # sample_discussion_50 = discussion_50.sample(n=10, random_state=1)
+    # print('Random sample of discussions with alignment at median:', sample_discussion_50.to_string())
     
-    discussion_spikes = discussion_df[discussion_df['average_alignment'] > 0.375]
+    discussion_spikes = discussion_df[discussion_df['average_alignment'] > 0.4]
     print('amount of discussions in spikes: ', len(discussion_spikes))
     print('alignment spikes: ', discussion_spikes.to_string())
     
     # """
+
+    print(len(discussion_df['discussion_id'].unique()))
+
+    data = read_csv(__datapath__filtered)
+    print(len(data['discussion_id'].unique()))
+
 
 
 def get_average(discussions_df, path):
@@ -287,7 +438,12 @@ def run_preprocessing_for_overlap_stats(datapath):
     :return: two lists of discussions as objects, for threads and for linear.
     """
     data = read_csv(datapath)
-    discussion_posts = get_discusssion_posts(data)
+    unique_discussions = data['discussion_id'].unique().tolist()
+    unique_discussions_shorter = unique_discussions[:50]
+    data_shorter = data[data['discussion_id'].isin(unique_discussions_shorter)]
+    discussion_posts = get_discusssion_posts(data_shorter)
+
+    # discussion_posts = get_discusssion_posts(data)
     removed_empty = remove_empty_discussions(discussion_posts)
     replaced_urls = replace_urls(removed_empty)
 
@@ -304,17 +460,17 @@ def get_overlap_stats():
 
     # linear_discussions = run_preprocessing_for_overlap_stats(__datapath__filtered)
     # preprocessed_linear = get_preprocessed_overlap(linear_discussions, __preprocessed_messages_linear__)
-    # alignment_linear = compute_lexical_word_alignment(linear_discussions, preprocessed_linear, __alignment_linear__) # linear
+    # alignment_linear = compute_lexical_word_alignment_SCP(linear_discussions, preprocessed_linear, __alignment_linear_SCP__, __preprocessed_messages_linear__) # linear
 
     # load alignment data
     # alignment_thread = read_csv(__alignment_thread__)
     # alignment_linear = read_csv(__alignment_linear__)
     #
-    # average_linear = get_average(alignment_linear, __avg_alignment_linear__)
+    # average_linear = get_average(alignment_linear, __avg_alignment_linear_SCP__)
 
     # load avg alignment data
     # average_thread = read_csv(__avg_alignment_thread__)
-    average_linear = read_csv(__avg_alignment_linear__)
+    average_linear = read_csv(__avg_alignment_linear_SCP__)
 
     print('linear data:')
     get_alignment_stats(average_linear, __discussion_alignment_histo_linear__)
@@ -410,14 +566,16 @@ def get_author_contri_stats():
         for a in author_indices:
             author_df = discussion_df.loc[discussions['author_id'] == a]
             no_posts = len(author_df)
+            contribution = no_posts / discussion_length
             auth_post_list.append([
                 i,
                 a,
-                no_posts
+                no_posts,
+                contribution
             ])
 
     len_discussion_df = pd.DataFrame(len_list, columns=['discussion_id', 'discussion_length', 'no_authors'])
-    auth_post_df = pd.DataFrame(auth_post_list, columns=['discussion_id', 'author_id', 'no_posts'])
+    auth_post_df = pd.DataFrame(auth_post_list, columns=['discussion_id', 'author_id', 'no_posts', 'contribution'])
 
     print('mean: \t', auth_post_df['no_posts'].mean())
     print('median: \t', auth_post_df['no_posts'].median())
@@ -515,6 +673,53 @@ def get_author_contri_stats():
     plt.show()
     """
 
+    no_most_authors = 5
+    auth_post_df_d_indices = auth_post_df['discussion_id'].unique()
+    bar_data = pd.DataFrame(0, auth_post_df_d_indices, range(0, no_most_authors + 1))
+
+
+    for d_idx in auth_post_df_d_indices:
+        print('idx', d_idx)
+        d_df = auth_post_df[auth_post_df['discussion_id'] == d_idx]
+        d_df = d_df.sort_values(by='contribution', ascending=False)
+        first_10 = d_df.head(no_most_authors)
+        first_10 = first_10.reset_index()
+        for i in first_10.index:
+            bar_data[i][d_idx] = first_10['contribution'][i]
+
+        if len(d_df.index) > no_most_authors:
+            rest = d_df.tail(-no_most_authors)
+            rest_contribution = rest['contribution'].sum()
+            bar_data[no_most_authors][d_idx] = rest_contribution
+
+    counts = np.zeros(no_most_authors + 1)
+    error = np.zeros((2, no_most_authors + 1))
+    for i in range(0, no_most_authors + 1):
+        avg = bar_data[i].mean()
+        counts[i] = avg
+        error[0][i] = avg - bar_data[i].min()
+        error[1][i] = bar_data[i].max() - avg
+        if error[1][i] > 0.8:
+            print(bar_data[i].max())
+            print(bar_data[i].describe(percentiles=[.01, .05, .1, .9, .95, .99, .995]))
+
+    fig, ax = plt.subplots()
+
+    authors = ['1st', '2nd', '3rd', '4th', '5th', 'rest']
+    # bar_labels = ['red', 'blue', '_red', 'orange']
+    # bar_colors = ['tab:red', 'tab:blue', 'tab:red', 'tab:orange']
+
+    ax.bar(authors, counts, yerr=error, color='#d74a94')
+
+    ax.set_xlabel('Most prolific authors')
+    ax.set_ylabel('% contribution')
+    ax.set_ylim((0, 1))
+    print('Mean contributions', counts)
+    ax.set_title('Percentage of contribution for most prolific authors')
+    plt.savefig('Results/DataStats/AuthorStats/author_contribution_bar_5.png')
+
+    plt.show()
+
 
 def get_max_threads(discussions):
     """
@@ -600,10 +805,9 @@ def get_max_thread_stats():
 
 
 
-
 # get_message_length_stats()
 # get_discussion_length_stats()
-# get_overlap_stats()
+get_overlap_stats()
 # get_author_stats()
-get_author_contri_stats()
+# get_author_contri_stats()
 # get_max_thread_stats()

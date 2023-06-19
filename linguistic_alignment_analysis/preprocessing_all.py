@@ -7,11 +7,13 @@ from datetime import datetime
 import copy
 import math
 import re
-from linguistic_alignment_analysis.compute_lexical_word_alignment import preprocess_message_lexical_word, jaccard_overlap
+from linguistic_alignment_analysis.compute_lexical_word_alignment import preprocess_message_lexical_word, \
+    jaccard_overlap, adapted_LLA
 
+# __jaccard_similarity_thread__ = 'AlignmentData/jaccard_similarity_thread.csv'
+# __jaccard_similarity_linear__ = 'AlignmentData/jaccard_similarity_linear.csv'
 
-__jaccard_similarity_thread__ = 'AlignmentData/jaccard_similarity_thread.csv'
-__jaccard_similarity_linear__ = 'AlignmentData/jaccard_similarity_linear.csv'
+__adapted_LLA_linear__ = 'AlignmentData/preprocessing_LLA_alignment_linear.csv'
 
 
 def get_discusssion_posts(input_df):
@@ -240,16 +242,79 @@ def remove_0_overlap(discussions, avg_overlap_data_path):
 
 def remove_high_overlap(discussions, avg_overlap_data_path):
     """
-    Removes discussions where the average Jaccard similarity is higher than 0.2 (outliers)
+    Removes discussions where the average adapted LLA is higher than 0.5 (outliers)
     :param discussions: discussions as list of objects
     :param avg_overlap_data_path: path from where to read the average overlap
     :return: discussions as list of objects with average higher than 0.2 overlap
     """
+    _alignment_threshold_ = 0.5
     print_t('Removing high overlap')
-    # If removing 0 overlap is run before, overlap was already computed. Therefore, loads data
-    average_df = read_csv(avg_overlap_data_path)
 
-    discussion_high = average_df[average_df['average_alignment'] > 0.2]
+    # Run adapted LLA preprocessing
+    print_t('preprocessing messages')
+    preprocessed_messages = {}
+    # get all the preprocessed posts
+    for i in discussions.keys():
+        discussion = discussions[i]
+        print_i('preprocessing for discussion' + str(discussion.discussion_id))
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            preprocessed = preprocess_message_lexical_word(post.message)
+            preprocessed_messages[str(i) + '-' + str(j)] = preprocessed
+
+    print_i('preprocessed messages')
+
+    print_t('computing adapted LLA for all messages and all of their parents')
+    data = []
+    for i in discussions.keys():
+        print('computing overlap: ', i)
+        discussion = discussions[i]
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            response_preprocessed_index = str(discussion.discussion_id) + '-' + str(post.post_id)
+            response_preprocessed = preprocessed_messages[response_preprocessed_index]
+            for k in range(0, len(post.thread)):
+                initial_post_id = post.thread[k]
+                initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
+                initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
+                alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
+                distance = len(post.thread) - k
+                data.append([
+                    discussion.discussion_id,
+                    initial_post_id,
+                    post.post_id,
+                    distance,
+                    alignment
+                ])
+    print_i('computed adapted LLA')
+
+    # Obtain adapted LLA dataframe
+    discussions_df = pd.DataFrame(data,
+                                  columns=['discussion_id', 'initial_message_id', 'response_message_id', 'distance',
+                                           'adapted_LLA'])
+
+    # Compute averages for each discussion
+    print_t('computing averages')
+    averages = []
+    discussion_indices = discussions_df['discussion_id'].unique()
+    for i in discussion_indices:
+        print('averaging alignment', i)
+        discussion_df = discussions_df.loc[discussions_df['discussion_id'] == i]
+        discussion_alignment_avg = discussion_df['adapted_LLA'].mean()
+        averages.append([
+            i,
+            discussion_alignment_avg
+        ])
+
+    # Store average overlap
+    average_df = pd.DataFrame(averages, columns=['discussion_id', 'average_alignment'])
+    average_df.to_csv(avg_overlap_data_path)
+    print_i('Computed averages')
+
+    # If removing 0 overlap is run before, overlap was already computed. Therefore, loads data
+    # average_df = read_csv(avg_overlap_data_path)
+
+    discussion_high = average_df[average_df['average_alignment'] > 0.5]
     discussion_ids_high = discussion_high['discussion_id'].unique().tolist()
     print_i('Found ' + str(len(discussion_ids_high)) + 'discussions to remove')
     filtered_discussions = {key: value for key, value in zip(discussions.keys(), discussions.values()) if value.discussion_id not in discussion_ids_high }
@@ -278,14 +343,14 @@ def run_preprocessing(datapath):
     removed_empty = remove_empty_discussions(discussion_posts)
     replaced_urls = replace_urls(removed_empty)
 
-    threads = get_discussion_threads(replaced_urls)
-    threads_consecutive_merged = merge_consecutive_messages(threads)
-    threads_removed_0_overlap = remove_0_overlap(threads_consecutive_merged, __jaccard_similarity_thread__)
-    threads_removed_high_overlap = remove_high_overlap(threads_removed_0_overlap, __jaccard_similarity_thread__)
+    # threads = get_discussion_threads(replaced_urls)
+    # threads_consecutive_merged = merge_consecutive_messages(copy.deepcopy(replaced_urls))
+    # threads_removed_0_overlap = remove_0_overlap(threads_consecutive_merged, __jaccard_similarity_thread__)
+    # threads_removed_high_overlap = remove_high_overlap(threads_removed_0_overlap, __jaccard_similarity_thread__)
 
     linear = get_discussion_linear_threads(copy.deepcopy(replaced_urls))
     linear_consecutive_merged = merge_consecutive_messages(linear)
-    linear_removed_0_overlap = remove_0_overlap(linear_consecutive_merged, __jaccard_similarity_linear__)
-    linear_removed_high_overlap = remove_high_overlap(linear_removed_0_overlap, __jaccard_similarity_linear__)
+    # linear_removed_0_overlap = remove_0_overlap(linear_consecutive_merged, __jaccard_similarity_linear__)
+    linear_removed_high_overlap = remove_high_overlap(linear_consecutive_merged, __adapted_LLA_linear__)
 
-    return threads_removed_high_overlap, linear_removed_high_overlap
+    return linear_removed_high_overlap

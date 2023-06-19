@@ -91,12 +91,12 @@ def get_preprocessed_messages_for_lexical_word(discussions, path, author_data_pa
     df.to_pickle(path)
     print_i('stored preprocessing data')
 
-    author_data = get_data_per_author(df)
-    print_t('Pickling data to ' + str(author_data_path))
-    store_file = open(author_data_path, 'ab')
-    pickle.dump(author_data, store_file)
-    store_file.close()
-    print_i('task completed')
+    # author_data = get_data_per_author(df)
+    # print_t('Pickling data to ' + str(author_data_path))
+    # store_file = open(author_data_path, 'ab')
+    # pickle.dump(author_data, store_file)
+    # store_file.close()
+    # print_i('task completed')
 
     return preprocessed_posts
 
@@ -127,8 +127,8 @@ def adapted_LLA(initial_message, response_message):
     if len(w_in_R_in_I) != 0 and len(response_message) != 0:
         return len(w_in_R_in_I) / len(response_message)
     else:
-        print(initial_message)
-        print(response_message)
+        # print(initial_message)
+        # print(response_message)
         return 0
 
 
@@ -174,7 +174,7 @@ def get_unique_words(discussions, preprocessed_messages):
     return word_series
 
 
-def compute_lexical_word_alignment(discussions, preprocessed_messages, path, author_data_path, normed_data_path):
+def compute_lexical_word_alignment_SCP(discussions, preprocessed_messages, path, author_data_path, normed_data_path):
     """
     Computes the actual alignment for each message and each of it's parent messages
     :param discussions: list of discussion objects
@@ -357,6 +357,45 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path, aut
     return df
 
 
+def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
+    """
+    Computes adapted LILLA alignment between messages in discussions
+    :param discussions:
+    :param preprocessed_messages:
+    :param path:
+    :return: df with alignment
+    """
+    print_t('computing lexical word alignment for all messages and all of their parents')
+    data = []
+    for i in discussions.keys():
+        print('computing alignment', i)
+        discussion = discussions[i]
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            response_preprocessed_index = str(discussion.discussion_id) + '-' + str(post.post_id)
+            response_preprocessed = preprocessed_messages[response_preprocessed_index]
+            for k in range(0, len(post.thread)):
+                initial_post_id = post.thread[k]
+                initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
+                initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
+                alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
+                distance = len(post.thread) - k
+                data.append([
+                    discussion.discussion_id,
+                    initial_post_id,
+                    post.post_id,
+                    distance,
+                    alignment
+                ])
+    print('[INFO] task completed')
+
+    print('[TASK] storing alignment data')
+    df = pd.DataFrame(data, columns=['discussion_id', 'initial_message_id', 'response_message_id', 'distance', 'lexical_word_alignment'])
+    df.to_csv(path)
+    print('[INFO] task completed')
+
+    return df
+
 
 def get_histograms_lexical_word_alignment_per_5(df):
     """
@@ -490,6 +529,154 @@ def get_overall_histogram_lexical_word_alignment_stacked(df, path):
     fig.savefig(path)
     fig.show()
     """
+
+def get_average(discussions_df):
+    """
+    Computes the average overlap for each discussion
+    :param discussions_df:
+    :param path:
+    :return: df with average overlap
+    """
+
+    averages = []
+    discussion_indices = discussions_df['discussion_id'].unique()
+    for i in discussion_indices:
+        print('averaging alignment', i)
+        discussion_df = discussions_df.loc[discussions_df['discussion_id'] == i]
+        discussion_alignment_avg = discussion_df['lexical_word_alignment'].mean()
+        averages.append([
+            i,
+            discussion_alignment_avg
+        ])
+
+    average_df = pd.DataFrame(averages, columns=['discussion_id', 'average_alignment'])
+    return average_df
+
+
+def get_overall_alignment_stats_all_previous(align_df, storage_path):
+    """
+    Generates one histogram for the average alignment in all discussions
+    :param align_df: dataframe containing alignment data
+    :param storage_path: path where to store histogram
+    """
+    average_df = get_average(align_df)
+
+    print('mean: \t', average_df['average_alignment'].mean())
+    print('percentiles: \t', average_df['average_alignment'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, 1]))
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
+
+    fig.suptitle('Average alignment in discussions, considering all previous messages')
+    fig.subplots_adjust(hspace=0.5)
+
+    ax1.set_xlim(0, 1)
+    # ax1.set_ylim(0, 5000)
+    ax2.set_xlim(0, 1)
+    ax2.set_yscale('log')
+    ax2.set_ylabel('# discussions')
+    ax3.set_xlim(0, 0.02)
+    # ax3.set_ylim(0, 500)
+    ax3.set_xlabel('Adapted LILLA alignment')
+    # ax.set_ylim(0, 100000) #2500000 for linear
+
+    # for ax in fig.get_axes():
+    #     ax.set_xlabel('# posts')
+    #     ax.set_ylabel('# discussions')
+
+    ax1.hist(average_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax2.hist(average_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax3.hist(average_df['average_alignment'], bins=np.arange(0, 0.03, 0.001),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+
+    fig.savefig(storage_path)
+    fig.show()
+
+
+def get_overall_alignment_stats_consecutive(align_df, storage_path):
+    """
+    Generates one histogram for average alignment within consecutive messages in discussions
+    :param align_df: dataframe containing alignment data
+    :param storage_path: path where to store histogram
+    """
+    consecutive_df = align_df.loc[align_df['distance'] == 1]
+    average_df = get_average(consecutive_df)
+
+    print('mean: \t', average_df['average_alignment'].mean())
+    print('percentiles: \t', average_df['average_alignment'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, 1]))
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
+
+    fig.suptitle('Average alignment in discussions, considering only consecutive messages')
+    fig.subplots_adjust(hspace=0.5)
+
+    ax1.set_xlim(0, 1)
+    # ax1.set_ylim(0, 5000)
+    ax2.set_xlim(0, 1)
+    ax2.set_yscale('log')
+    ax2.set_ylabel('# discussions')
+    ax3.set_xlim(0, 0.02)
+    # ax3.set_ylim(0, 500)
+    ax3.set_xlabel('Adapted LILLA alignment')
+    # ax.set_ylim(0, 100000) #2500000 for linear
+
+    # for ax in fig.get_axes():
+    #     ax.set_xlabel('# posts')
+    #     ax.set_ylabel('# discussions')
+
+    ax1.hist(average_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax2.hist(average_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax3.hist(average_df['average_alignment'], bins=np.arange(0, 0.03, 0.001),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+
+    fig.savefig(storage_path)
+    fig.show()
+
+
+def get_overall_alignment_stats_initial(align_df, storage_path):
+    """
+    Generates one histogram for average alignment with messages and initial message in discussions
+    :param align_df: dataframe containing alignment data
+    :param storage_path: path where to store histogram
+    """
+    consecutive_df = align_df.loc[align_df['initial_message_id'] == 1]
+    average_df = get_average(consecutive_df)
+
+    print('mean: \t', average_df['average_alignment'].mean())
+    print('percentiles: \t', average_df['average_alignment'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, 1]))
+
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
+
+    fig.suptitle('Average alignment in discussions, considering pairs with only the first message')
+    fig.subplots_adjust(hspace=0.5)
+
+    ax1.set_xlim(0, 1)
+    # ax1.set_ylim(0, 5000)
+    ax2.set_xlim(0, 1)
+    ax2.set_yscale('log')
+    ax2.set_ylabel('# discussions')
+    ax3.set_xlim(0, 0.02)
+    # ax3.set_ylim(0, 500)
+    ax3.set_xlabel('Adapted LILLA alignment')
+    # ax.set_ylim(0, 100000) #2500000 for linear
+
+    # for ax in fig.get_axes():
+    #     ax.set_xlabel('# posts')
+    #     ax.set_ylabel('# discussions')
+
+    ax1.hist(average_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax2.hist(average_df['average_alignment'], bins=np.arange(0, 1, 0.01),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+    ax3.hist(average_df['average_alignment'], bins=np.arange(0, 0.03, 0.001),
+             color='#d74a94')  # color='#d74a94'  histtype='step'
+
+    fig.savefig(storage_path)
+    fig.show()
+
 
 
 # jaccard_overlap(['a', 'b', 'c', 'd'], ['e', 'b', 'c', 'd'])

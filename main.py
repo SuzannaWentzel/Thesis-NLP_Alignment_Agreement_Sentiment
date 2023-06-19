@@ -1,7 +1,8 @@
 from Helpers import read_csv, print_t, print_i
 from linguistic_alignment_analysis.compute_lexical_word_alignment import get_preprocessed_messages_for_lexical_word, \
     compute_lexical_word_alignment, get_overall_histogram_lexical_word_alignment, \
-    get_overall_histogram_lexical_word_alignment_stacked
+    get_overall_histogram_lexical_word_alignment_stacked, get_overall_alignment_stats_all_previous, \
+    get_overall_alignment_stats_consecutive, get_overall_alignment_stats_initial
 from linguistic_alignment_analysis.compute_semantical_alignment import get_preprocessed_messages_for_semantic, \
     compute_semantic_alignment, get_overall_histogram_semantic_alignment
 from linguistic_alignment_analysis.compute_syntactical_alignment import get_syntactical_alignment
@@ -15,7 +16,8 @@ __linear_data__ = {}
 
 # __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv'
 # __datapath__ = './Data/discussion_post_text_date_author_parents_unfiltered.csv'
-__datapath__ = './Data/dummy_data.csv'
+# __datapath__ = './Data/dummy_data.csv'
+__datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_four_posts.csv'
 
 __pickle_path_preprocessed_linear__ = './PickleData/preprocessed_linear'
 __pickle_path_preprocessed_tree__ = './PickleData/preprocessed_tree'
@@ -68,8 +70,9 @@ def get_preprocessed_data():
     """
     print_t('Preprocessing data')
     global __threaded_data__, __linear_data__
-    __threaded_data__, __linear_data__ = run_preprocessing(__datapath__)
-    store_data(__threaded_data__, __pickle_path_preprocessed_tree__)
+    # __threaded_data__, __linear_data__ = run_preprocessing(__datapath__)
+    __linear_data__ = run_preprocessing(__datapath__)
+    # store_data(__threaded_data__, __pickle_path_preprocessed_tree__)
     store_data(__linear_data__, __pickle_path_preprocessed_linear__)
     print_i('Preprocessing completed')
 
@@ -82,10 +85,10 @@ def get_preprocessed_data_from_pickle():
     print_t('Getting preprocessed data')
     global __threaded_data__, __linear_data__
 
-    __threaded_data__ = load_data(__pickle_path_preprocessed_tree__)
+    # __threaded_data__ = load_data(__pickle_path_preprocessed_tree__)
     __linear_data__ = load_data(__pickle_path_preprocessed_linear__)
 
-    print_i(f'Len threaded data: {len(__threaded_data__)}')
+    # print_i(f'Len threaded data: {len(__threaded_data__)}')
     print_i(f'Len linear data: {len(__linear_data__)}')
     print_i('Got preprocessed data')
 
@@ -115,12 +118,14 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
 
         if not alignment_ran:
             # run alignment
-            alignment_linear_df = compute_lexical_word_alignment(__linear_data__, preprocessed_lexical_word_linear, __csv_lexical_word_alignment_linear__, __pickle_path_preprocessed_author_data_linear__, __pickle_path_lexical_word_normed_vals_linear__)
+            alignment_linear_df = compute_lexical_word_alignment(__linear_data__, preprocessed_lexical_word_linear, __csv_lexical_word_alignment_linear__)
         else:
             # load alignment
             alignment_linear_df = read_csv(__csv_lexical_word_alignment_linear__)
 
-        get_overall_histogram_lexical_word_alignment_stacked(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_stacked')
+        get_overall_alignment_stats_all_previous(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_all_previous_stacked')
+        get_overall_alignment_stats_consecutive(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_consecutive_stacked')
+        get_overall_alignment_stats_initial(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_initial_stacked')
         print_i('task completed: got linear lexical word alignment')
 
     if get_thread:
@@ -209,5 +214,5 @@ def get_semantical_alignment(semantic_preprocessed=True, alignment_ran=True, get
 
 get_preprocessed_data()
 # get_preprocessed_data_from_pickle()
-get_lexical_word_alignment(lexical_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)
+get_lexical_word_alignment(lexical_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=False)
 # get_syntactical_alignment(semantic_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)
