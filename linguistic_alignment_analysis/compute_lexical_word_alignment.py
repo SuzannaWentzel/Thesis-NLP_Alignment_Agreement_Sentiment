@@ -357,6 +357,45 @@ def compute_lexical_word_alignment_SCP(discussions, preprocessed_messages, path,
     return df
 
 
+def compute_lexical_word_alignment_adapted_LILLA(discussions, preprocessed_messages, path):
+    """
+    Computes adapted LILLA alignment between messages in discussions
+    :param discussions:
+    :param preprocessed_messages:
+    :param path:
+    :return: df with alignment
+    """
+    print_t('computing lexical word alignment for all messages and all of their parents')
+    data = []
+    for i in discussions.keys():
+        print('computing alignment', i)
+        discussion = discussions[i]
+        for j in discussion.posts.keys():
+            post = discussion.posts[j]
+            response_preprocessed_index = str(discussion.discussion_id) + '-' + str(post.post_id)
+            response_preprocessed = preprocessed_messages[response_preprocessed_index]
+            for k in range(0, len(post.thread)):
+                initial_post_id = post.thread[k]
+                initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
+                initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
+                alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
+                distance = len(post.thread) - k
+                data.append([
+                    discussion.discussion_id,
+                    initial_post_id,
+                    post.post_id,
+                    distance,
+                    alignment
+                ])
+    print('[INFO] task completed')
+
+    print('[TASK] storing alignment data')
+    df = pd.DataFrame(data, columns=['discussion_id', 'initial_message_id', 'response_message_id', 'distance', 'lexical_word_alignment'])
+    df.to_csv(path)
+    print('[INFO] task completed')
+
+    return df
+
 def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
     """
     Computes adapted LILLA alignment between messages in discussions
@@ -395,6 +434,7 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
     print('[INFO] task completed')
 
     return df
+
 
 
 def get_histograms_lexical_word_alignment_per_5(df):
@@ -650,7 +690,7 @@ def get_overall_alignment_stats_initial(align_df, storage_path):
 
     fig, (ax1, ax2, ax3) = plt.subplots(3)
 
-    fig.suptitle('Average alignment in discussions, considering pairs with only the first message')
+    fig.suptitle('Average alignment in discussions, with the first message')
     fig.subplots_adjust(hspace=0.5)
 
     ax1.set_xlim(0, 1)
@@ -678,6 +718,166 @@ def get_overall_alignment_stats_initial(align_df, storage_path):
     fig.show()
 
 
+def get_time_alignment_50(discussions_df, storage_path):
+    consecutive_df = discussions_df.loc[discussions_df['distance'] == 1]
+    discussion_length = []
+    unique_disc_idxs = consecutive_df['discussion_id'].unique()
+    for d_idx in unique_disc_idxs:
+        print('at ', d_idx)
+        discussion = consecutive_df.loc[consecutive_df['discussion_id'] == d_idx]
+        discussion_length.append([
+            d_idx, len(discussion) + 1
+        ])
+    length_df = pd.DataFrame(discussion_length, columns=['discussion_id', 'no_posts'])
+    print(length_df)
+
+    disc_length_50 = length_df.loc[length_df['no_posts'] == 50]
+    print(disc_length_50)
+    print('length: ', len(disc_length_50))
+
+    fig = plt.figure()
+
+    discussion_50_alignment = consecutive_df.loc[consecutive_df['discussion_id'].isin(disc_length_50['discussion_id'])]
+    unique_disc_idxs_consecutive = discussion_50_alignment['discussion_id'].unique()
+    for d_idx in unique_disc_idxs_consecutive:
+        discussion = discussion_50_alignment.loc[discussion_50_alignment['discussion_id'] == d_idx]
+        alignment_vals = discussion['lexical_word_alignment']
+        p_idxs = range(2, len(alignment_vals) + 2)
+
+        # fig.plot(p_idxs, alignment_vals)
+        plt.scatter(p_idxs, alignment_vals, color='#d74a94', s=1)
+
+    plt.xlabel('time (in posts)')
+    plt.ylabel('adapted LILLA alignment')
+    plt.show()
+    plt.savefig(storage_path)
+
+
+def get_time_alignment_50_heat(discussions_df, storage_path):
+    consecutive_df = discussions_df.loc[discussions_df['distance'] == 1]
+    discussion_length = []
+    unique_disc_idxs = consecutive_df['discussion_id'].unique()
+    for d_idx in unique_disc_idxs:
+        print('at ', d_idx)
+        discussion = consecutive_df.loc[consecutive_df['discussion_id'] == d_idx]
+        discussion_length.append([
+            d_idx, len(discussion) + 1
+        ])
+    length_df = pd.DataFrame(discussion_length, columns=['discussion_id', 'no_posts'])
+    print(length_df)
+
+    disc_length_50 = length_df.loc[length_df['no_posts'] == 50]
+    print(disc_length_50)
+    print('length: ', len(disc_length_50))
+
+    discussion_50_alignment = consecutive_df.loc[consecutive_df['discussion_id'].isin(disc_length_50['discussion_id'])]
+    unique_disc_idxs_consecutive = discussion_50_alignment['discussion_id'].unique()
+    heat_matrix = np.zeros((len(unique_disc_idxs_consecutive), 49))
+    for i, d_idx in enumerate(unique_disc_idxs_consecutive):
+        discussion = discussion_50_alignment.loc[discussion_50_alignment['discussion_id'] == d_idx]
+        alignment_vals = discussion['lexical_word_alignment']
+        # p_idxs = range(2, len(alignment_vals) + 2)
+
+        heat_matrix[i] = alignment_vals
+
+    print(heat_matrix)
+    bins = 50
+    histos = np.full((bins-1, 49), np.nan)
+    for i in range(0, 49):
+        col = heat_matrix[:, i]
+        histogram = np.histogram(col, bins=np.linspace(0, 1.01, bins))
+        histos[i] = histogram[0]
+
+    fig, ax1 = plt.subplots(1)
+    cs1 = ax1.pcolormesh(histos.T, cmap="jet")
+    fig.colorbar(cs1, ax=ax1, shrink=0.4, aspect=5)
+    ax1.set_xlabel('Time (in posts)')
+    ax1.set_ylabel('Adapted LILLA Alignment')
+    ax1.set_yticks()
+
+    plt.show()
+
+
+
+    # plt.xlabel('time (in posts)')
+    # plt.ylabel('adapted LILLA alignment')
+    # plt.show()
+    # plt.savefig(storage_path)
+
+    # discussion_length_indices = len_discussion_df['discussion_length'].unique()
+    # max_discussion_length = len_discussion_df['discussion_length'].max()
+    # author_indices = len_discussion_df['no_authors'].unique()
+    # max_no_authors = len_discussion_df['no_authors'].max()
+    # empty_df = pd.DataFrame(np.nan, range(0, max_no_authors + 1), range(0, max_discussion_length + 1))
+    #
+    # for i in discussion_length_indices:
+    #     print('constructing dataframe', i, 'out of', max_discussion_length)
+    #     same_length_rows = len_discussion_df.loc[len_discussion_df['discussion_length'] == i]
+    #     unique_no_authors = same_length_rows['no_authors'].unique()
+    #     for j in unique_no_authors:
+    #         no_discussions_length = len_discussion_df.loc[(len_discussion_df['discussion_length'] == i) & (len_discussion_df['no_authors'] == j)]
+    #         empty_df.at[j, i] = len(no_discussions_length)
+    #
+    # # fig, ax = plt.subplots()
+    # # im = ax.imshow(data, cmap="RdPu")
+    # #
+    # # ax.set_xticks(np.arange(0, len(x), 1000))
+    # # ax.set_yticks(np.arange(0, len(y), 1000))
+    # #
+    # # ax.set_title('Contribution of authors')
+    # # fig.tight_layout()
+    # # plt.show()
+    #
+    # # plt.pcolormesh(x, y, z, cmap="RdPu", shading='nearest')
+    # # plt.colorbar()
+    # # plt.show()
+    #
+    # # data_df = pd.DataFrame(data, columns=['discussion_length', 'no_authors', 'no_discussions'])
+    #
+    # fig, (ax1, ax2, ax3) = plt.subplots(3)
+    #
+    #
+    # print('plotting graphs')
+    # # data_df_pivot = empty_df.pivot(columns="discussion_length", index="no_authors")
+    #
+    # norm_factor = empty_df.sum()
+    # data_df_pivot_normed = empty_df / norm_factor
+    #
+    # # fig = plt.figure(dpi=300, figsize=(9.5, 2.5))
+    # cs1 = ax1.pcolormesh(empty_df.values, norm="log", cmap="jet")
+    # cs2 = ax2.pcolormesh(data_df_pivot_normed.values, norm="log", cmap="jet")
+    # cs3 = ax3.pcolormesh(data_df_pivot_normed.values, norm="log", cmap="jet")
+    #
+    # # fig.set_figheight(10)
+    # # ax.axis('equal')
+    # fig.colorbar(cs1, ax=ax1, shrink=0.4, aspect=5)
+    # fig.colorbar(cs2, ax=ax2, shrink=0.4, aspect=5)
+    # fig.colorbar(cs3, ax=ax3, shrink=0.4, aspect=5)
+    #
+    # ax1.set_aspect('equal', 'box')
+    # ax1.set_xlim((0, 1300))
+    # ax1.set_ylim((0, 160))
+    #
+    # ax2.set_aspect('equal', 'box')
+    # ax2.set_ylabel('# of authors')
+    # ax2.set_xlim((0, 1300))
+    # ax2.set_ylim((0, 160))
+    #
+    # ax3.set_aspect('equal', 'box')
+    # ax3.set_xlabel('Discussion length')
+    # ax3.set_xlim((0, 325))
+    # ax3.set_ylim((0, 40))
+    # # ax.set(xlim=(0, 1300), ylim=(0, 160))
+    #
+    # plt.suptitle('Author contribution')
+    # plt.tight_layout()
+    # plt.savefig('Results/DataStats/AuthorStats/author_contribution_heat_combined.png')
+
+
+def get_time_alignment_all(discussion_df):
+    consecutive_df = discussion_df.loc[discussion_df['distance'] == 1]
+
+
 
 # jaccard_overlap(['a', 'b', 'c', 'd'], ['e', 'b', 'c', 'd'])
 # jaccard_overlap(['a', 'b', 'c', 'd', 'a', 'b', 'c', 'd', 'a', 'b', 'c', 'd'], ['e', 'b', 'c', 'd', 'e', 'b', 'c', 'd', 'e', 'b', 'c', 'd'])
@@ -694,3 +894,7 @@ def get_overall_alignment_stats_initial(align_df, storage_path):
 # print(adapted_LLA(['a', 'b', 'c', 'd'], ['e', 'f', 'a']))
 # print(adapted_LLA(['a', 'b', 'c', 'd'], ['e', 'b', 'c', 'd']))
 # print(adapted_LLA(['a', 'b', 'c', 'd', 'g', 'h', 'i', 'j', 'k', 'l', 'm'], ['e', 'f', 'a']))
+
+
+# print(preprocess_message_lexical_word('The teacher was walking to the classroom. I took a walk there.'))
+# print(preprocess_message_lexical_word('I was working hard today. Did you have a lot of work todo?'))

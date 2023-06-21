@@ -2,7 +2,8 @@ from Helpers import read_csv, print_t, print_i
 from linguistic_alignment_analysis.compute_lexical_word_alignment import get_preprocessed_messages_for_lexical_word, \
     compute_lexical_word_alignment, get_overall_histogram_lexical_word_alignment, \
     get_overall_histogram_lexical_word_alignment_stacked, get_overall_alignment_stats_all_previous, \
-    get_overall_alignment_stats_consecutive, get_overall_alignment_stats_initial
+    get_overall_alignment_stats_consecutive, get_overall_alignment_stats_initial, get_time_alignment_50, \
+    get_time_alignment_50_heat
 from linguistic_alignment_analysis.compute_semantical_alignment import get_preprocessed_messages_for_semantic, \
     compute_semantic_alignment, get_overall_histogram_semantic_alignment
 from linguistic_alignment_analysis.compute_syntactical_alignment import get_syntactical_alignment
@@ -123,9 +124,11 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
             # load alignment
             alignment_linear_df = read_csv(__csv_lexical_word_alignment_linear__)
 
-        get_overall_alignment_stats_all_previous(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_all_previous_stacked')
-        get_overall_alignment_stats_consecutive(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_consecutive_stacked')
-        get_overall_alignment_stats_initial(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_initial_stacked')
+        # get_overall_alignment_stats_all_previous(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_all_previous_stacked')
+        # get_overall_alignment_stats_consecutive(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_consecutive_stacked')
+        # get_overall_alignment_stats_initial(alignment_linear_df, './Results/Lexical_word_alignment/all_histo_linear_initial_stacked')
+        # get_time_alignment_50(alignment_linear_df, './Results/Lexical_word_alignment/time_chart_50')
+        get_time_alignment_50_heat(alignment_linear_df, './Results/Lexical_word_alignment/time_heat_50')
         print_i('task completed: got linear lexical word alignment')
 
     if get_thread:
@@ -212,7 +215,7 @@ def get_semantical_alignment(semantic_preprocessed=True, alignment_ran=True, get
                                                      './Results/Semantical_alignment/all_histo_linear')
 
 
-get_preprocessed_data()
+# get_preprocessed_data()
 # get_preprocessed_data_from_pickle()
-get_lexical_word_alignment(lexical_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=False)
+get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, get_linear=True, get_thread=False)
 # get_syntactical_alignment(semantic_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)
