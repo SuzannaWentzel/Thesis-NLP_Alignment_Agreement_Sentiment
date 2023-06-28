@@ -396,7 +396,7 @@ def compute_lexical_word_alignment_adapted_LILLA(discussions, preprocessed_messa
 
     return df
 
-def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
+def compute_lexical_word_alignment(discussions, discussions_df, preprocessed_messages, path):
     """
     Computes adapted LILLA alignment between messages in discussions
     :param discussions:
@@ -409,23 +409,29 @@ def compute_lexical_word_alignment(discussions, preprocessed_messages, path):
     for i in discussions.keys():
         print('computing alignment', i)
         discussion = discussions[i]
+        discussion_df = discussions_df.loc[discussions_df['discussion_id'] == i]
         for j in discussion.posts.keys():
             post = discussion.posts[j]
             response_preprocessed_index = str(discussion.discussion_id) + '-' + str(post.post_id)
             response_preprocessed = preprocessed_messages[response_preprocessed_index]
-            for k in range(0, len(post.thread)):
-                initial_post_id = post.thread[k]
-                initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
-                initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
-                alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
-                distance = len(post.thread) - k
-                data.append([
-                    discussion.discussion_id,
-                    initial_post_id,
-                    post.post_id,
-                    distance,
-                    alignment
-                ])
+            previous_messages = discussion_df.loc[discussion_df['post_id'] < j]
+            other_authors = previous_messages.loc[previous_messages['author_id'] != post.username]
+
+
+
+
+                # initial_post_id = post.thread[k]
+                # initial_preprocessed_index = str(discussion.discussion_id) + '-' + str(initial_post_id)
+                # initial_preprocessed = preprocessed_messages[initial_preprocessed_index]
+                # alignment = adapted_LLA(initial_preprocessed, response_preprocessed)
+                # distance = len(post.thread) - k
+                # data.append([
+                #     discussion.discussion_id,
+                #     initial_post_id,
+                #     post.post_id,
+                #     distance,
+                #     alignment
+                # ])
     print('[INFO] task completed')
 
     print('[TASK] storing alignment data')

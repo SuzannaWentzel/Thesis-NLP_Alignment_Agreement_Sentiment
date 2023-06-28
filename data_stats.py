@@ -583,7 +583,6 @@ def get_author_contri_stats():
     print('max: \t', auth_post_df['no_posts'].max())
     print('percentiles: \t', auth_post_df['no_posts'].describe(percentiles=[.01, .05, .1, .9, .95, .99, .995, 1]))
 
-
     # x = []
     # y = []
     # z = []
@@ -599,26 +598,9 @@ def get_author_contri_stats():
         unique_no_authors = same_length_rows['no_authors'].unique()
         for j in unique_no_authors:
             no_discussions_length = len_discussion_df.loc[(len_discussion_df['discussion_length'] == i) & (len_discussion_df['no_authors'] == j)]
-            empty_df.at[j, i] = len(no_discussions_length)
-
-    # fig, ax = plt.subplots()
-    # im = ax.imshow(data, cmap="RdPu")
-    #
-    # ax.set_xticks(np.arange(0, len(x), 1000))
-    # ax.set_yticks(np.arange(0, len(y), 1000))
-    #
-    # ax.set_title('Contribution of authors')
-    # fig.tight_layout()
-    # plt.show()
-
-    # plt.pcolormesh(x, y, z, cmap="RdPu", shading='nearest')
-    # plt.colorbar()
-    # plt.show()
-
-    # data_df = pd.DataFrame(data, columns=['discussion_length', 'no_authors', 'no_discussions'])
+            empty_df.at[j, i] = len(no_discussions_length['discussion_id'].unique())
 
     fig, (ax1, ax2, ax3) = plt.subplots(3)
-
 
     print('plotting graphs')
     # data_df_pivot = empty_df.pivot(columns="discussion_length", index="no_authors")
@@ -654,7 +636,7 @@ def get_author_contri_stats():
 
     plt.suptitle('Author contribution')
     plt.tight_layout()
-    plt.savefig('Results/DataStats/AuthorStats/author_contribution_heat_combined.png')
+    plt.savefig('Results/DataStats/AuthorStats/author_contribution_heat_combined_discussions.png')
     # plt.show()
 
     """
@@ -673,7 +655,7 @@ def get_author_contri_stats():
     plt.show()
     """
 
-    no_most_authors = 5
+    no_most_authors = 10
     auth_post_df_d_indices = auth_post_df['discussion_id'].unique()
     bar_data = pd.DataFrame(0, auth_post_df_d_indices, range(0, no_most_authors + 1))
 
@@ -695,28 +677,28 @@ def get_author_contri_stats():
     counts = np.zeros(no_most_authors + 1)
     error = np.zeros((2, no_most_authors + 1))
     for i in range(0, no_most_authors + 1):
-        avg = bar_data[i].mean()
-        counts[i] = avg
-        error[0][i] = avg - bar_data[i].min()
-        error[1][i] = bar_data[i].max() - avg
+        median = bar_data[i].median()
+        counts[i] = median
+        error[0][i] = median - bar_data[i].min()
+        error[1][i] = bar_data[i].max() - median
         if error[1][i] > 0.8:
             print(bar_data[i].max())
             print(bar_data[i].describe(percentiles=[.01, .05, .1, .9, .95, .99, .995]))
 
     fig, ax = plt.subplots()
 
-    authors = ['1st', '2nd', '3rd', '4th', '5th', 'rest']
+    authors = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th', 'rest']
     # bar_labels = ['red', 'blue', '_red', 'orange']
     # bar_colors = ['tab:red', 'tab:blue', 'tab:red', 'tab:orange']
 
     ax.bar(authors, counts, yerr=error, color='#d74a94')
 
     ax.set_xlabel('Most prolific authors')
-    ax.set_ylabel('% contribution')
+    ax.set_ylabel('Median fraction of contribution')
     ax.set_ylim((0, 1))
     print('Mean contributions', counts)
-    ax.set_title('Percentage of contribution for most prolific authors')
-    plt.savefig('Results/DataStats/AuthorStats/author_contribution_bar_5.png')
+    ax.set_title('Fraction of contribution for most prolific authors')
+    plt.savefig('Results/DataStats/AuthorStats/author_contribution_bar_10_median.png')
 
     plt.show()
 
@@ -807,7 +789,7 @@ def get_max_thread_stats():
 
 # get_message_length_stats()
 # get_discussion_length_stats()
-get_overlap_stats()
+# get_overlap_stats()
 # get_author_stats()
-# get_author_contri_stats()
+get_author_contri_stats()
 # get_max_thread_stats()

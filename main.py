@@ -119,7 +119,8 @@ def get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, ge
 
         if not alignment_ran:
             # run alignment
-            alignment_linear_df = compute_lexical_word_alignment(__linear_data__, preprocessed_lexical_word_linear, __csv_lexical_word_alignment_linear__)
+            preprocessed_df = load_data(__pickle_path_df_lexical_word_preprocessed_linear__)
+            alignment_linear_df = compute_lexical_word_alignment(__linear_data__, preprocessed_df, preprocessed_lexical_word_linear, __csv_lexical_word_alignment_linear__)
         else:
             # load alignment
             alignment_linear_df = read_csv(__csv_lexical_word_alignment_linear__)
@@ -217,5 +218,5 @@ def get_semantical_alignment(semantic_preprocessed=True, alignment_ran=True, get
 
 # get_preprocessed_data()
 # get_preprocessed_data_from_pickle()
-get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=True, get_linear=True, get_thread=False)
+# get_lexical_word_alignment(lexical_preprocessed=True, alignment_ran=False, get_linear=True, get_thread=False)
 # get_syntactical_alignment(semantic_preprocessed=False, alignment_ran=False, get_linear=True, get_thread=True)
