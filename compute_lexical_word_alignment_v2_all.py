@@ -230,7 +230,7 @@ average_df = pd.DataFrame(averages, columns=['discussion_id', 'average_alignment
 
 #%% Plot alignment distribution
 print('mean: \t', average_df['average_alignment'].mean())
-print('percentiles: \t', average_df['average_alignment'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, 1]))
+print('percentiles: \t', average_df['average_alignment'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, .995, 1]))
 
 fig, (ax1, ax2) = plt.subplots(2)
 
@@ -250,9 +250,29 @@ ax2.hist(average_df['average_alignment'], bins=np.arange(0, 1, 0.01),
 
 fig.show()
 
-discussion_spikes = average_df[average_df['average_alignment'] > 0.9]
-print('amount of discussions in spikes: ', len(discussion_spikes))
-print('alignment spikes: ', discussion_spikes.to_string())
+discussion_spikes_low = average_df[average_df['average_alignment'] < 0.15]
+print('amount of discussions in spikes in beginning: ', len(discussion_spikes_low))
+print('alignment spikes: ', discussion_spikes_low.to_string())
+
+
+discussion_1 = average_df[average_df['average_alignment'] < average_df['average_alignment'].quantile(.01)]
+sample_discussion_1 = discussion_1.sample(n=10, random_state=1)
+print('Random sample of discussions with alignment in first percentile: ', sample_discussion_1.to_string())
+
+discussion_50 = average_df[(average_df['average_alignment'] < average_df['average_alignment'].quantile(.51)) & (average_df['average_alignment'] > average_df['average_alignment'].quantile(.49))]
+sample_discussion_50 = discussion_50.sample(n=10, random_state=1)
+print('Random sample of discussions with alignment at median:', sample_discussion_50.to_string())
+
+discussion_995 = average_df[average_df['average_alignment'] > average_df['average_alignment'].quantile(.995)]
+sample_discussion_995 = discussion_995.sample(n=10, random_state=1)
+print('Random sample of discussions with alignment in last 0.05th percentile: ', sample_discussion_995.to_string())
+
+discussion_spikes_high = average_df[average_df['average_alignment'] > 0.9]
+print('amount of discussions in spikes on end: ', len(discussion_spikes_high))
+print('alignment spikes: ', discussion_spikes_high.to_string())
+
+
+
 
 #%% Obtain timeseries clustering
 # add correct post index
@@ -356,7 +376,7 @@ rolling_average_df = pd.DataFrame(data_rolling_average, columns=['discussion_id'
 
 #%% Apply clustering to rolling average
 pivoted_rolling_average = rolling_average_df.pivot(index='discussion_id', columns='time_post_id')
-model_rolling_avg = TimeSeriesKMeans(n_clusters=5, metric="dtw", max_iter=10)
+model_rolling_avg = TimeSeriesKMeans(n_clusters=10, metric="dtw", max_iter=10)
 y_ra = model_rolling_avg.fit_predict(pivoted_rolling_average.values)
 x_ra = rolling_average_df['time_post_id'].unique()
 
