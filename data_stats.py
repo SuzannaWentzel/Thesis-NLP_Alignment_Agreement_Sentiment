@@ -1,3 +1,5 @@
+#%% Imports
+
 from Helpers import read_csv, print_t, print_i
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,6 +13,8 @@ from linguistic_alignment_analysis.preprocessing_all import run_preprocessing, g
     get_discussion_linear_threads
 import copy
 from collections import Counter
+import pickle
+
 
 
 # __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_two_posts.csv' #use the unfiltered csv for original data
@@ -35,7 +39,12 @@ __max_thread_thread__ = './Results/DataStats/TempStorage/df_max_thread_thread.cs
 __max_thread_histo_linear__ = './Results/DataStats/histo_max_thread_linear.png'
 __max_thread_histo_thread__ = './Results/DataStats/histo_max_thread_thread.png'
 __author_histo__ = './Results/DataStats/histo_author.png'
+# __pickle_path_preprocessed_lexical_alignment__ = './PickleData/preprocessed_lexical_alignment_time_based_linear'
+__pickle_path_df_lexical_word_preprocessed_linear__ = './PickleData/preprocessed_df_lexical_word_linear'
 
+
+
+#%%
 
 
 def get_message_length_stats():
@@ -786,10 +795,40 @@ def get_max_thread_stats():
 
 
 
-
 # get_message_length_stats()
 # get_discussion_length_stats()
 # get_overlap_stats()
 # get_author_stats()
 get_author_contri_stats()
 # get_max_thread_stats()
+
+
+#%% Find word stats
+# Reset discussions (just necessary for python console)
+discussions_preprocessed = {}
+
+#Load preprocessed data (see preprocessing.py)
+
+print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_df_lexical_word_preprocessed_linear__))
+store_file = open(__pickle_path_df_lexical_word_preprocessed_linear__, 'rb')
+discussions_preprocessed = pickle.load(store_file)
+store_file.close()
+print_i('Loaded data from pickle')
+
+
+#%%
+discussion_series = discussions_preprocessed['preprocessed_text']
+corpus_counter = Counter()
+for index, row in discussion_series.items():
+    post_counter = Counter(row)
+    corpus_counter.update(post_counter)
+
+
+#%%
+labels, values = zip(*corpus_counter.items())
+
+indexes = np.arange(len(labels))
+width = 1
+
+plt.hist(values)
+plt.show()

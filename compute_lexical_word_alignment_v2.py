@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from tslearn.clustering import TimeSeriesKMeans
 import numpy as np
 from numpy.polynomial import Chebyshev
+from sklearn.metrics import davies_bouldin_score
 
 __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_four_posts.csv'
 __preprocessing_adapted_LLA_avg_linear__ = 'AlignmentData/preprocessing_LLA_alignment_linear.csv'
@@ -374,3 +375,118 @@ axs[len(unique_classes_ra)-1].set_xlabel('Posts in time')
 
 fig.suptitle('Alignment over time per found class')
 fig.show()
+
+
+#%% Try out metrics
+# Doesnt work bc of the time:
+# davies_bouldin_score = davies_bouldin_score(rolling_average_df, y_ra)
+# print(davies_bouldin_score)
+
+# find inertia, returned by kmeans
+inertia = model_rolling_avg.inertia_
+print(inertia)
+
+# Find number of clusters by elbow method.
+metrics = []
+no_clusters = []
+inertia = []
+for n in range(3, 10):
+    model_rolling_avg = TimeSeriesKMeans(n_clusters=n, metric="dtw", max_iter=5)
+    y_ra = model_rolling_avg.fit_predict(pivoted_rolling_average.values)
+    x_ra = rolling_average_df['time_post_id'].unique()
+    metrics.append([
+        n,
+        model_rolling_avg,
+        model_rolling_avg.inertia_
+    ])
+    no_clusters.append(n)
+    inertia.append(model_rolling_avg.inertia_)
+
+plt.plot(no_clusters, inertia)
+plt.show()
+
+
+#%% Inter class variance & cardinality
+
+variances = []
+cardinality = []
+means_sum_squares = []
+for u_class in unique_classes_ra:
+    discussions_with_class = predicted_classes_ra.loc[predicted_classes_ra['class'] == u_class]
+    discussion_ids_with_class = discussions_with_class.index
+    discussions_df_with_class = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(discussion_ids_with_class)]
+    discussions_pivoted_df_with_class = pivoted_rolling_average.loc[discussion_ids_with_class]
+
+    variances_timeseries = discussions_pivoted_df_with_class.var(axis=0)
+    mean_class_variance = variances_timeseries.mean()
+    variances.append(mean_class_variance)
+    cardinality.append(discussions_pivoted_df_with_class.index.size)
+
+    mean_timeseries = discussions_pivoted_df_with_class.mean(axis=0)
+    diffs_timeseries = discussions_pivoted_df_with_class.sub(mean_timeseries)
+    squared_timeseries = diffs_timeseries.pow(2)
+    sum_time = squared_timeseries.sum(axis=0)
+    mean_sum_squares = sum_time.mean()
+    means_sum_squares.append(mean_sum_squares)
+
+plt.figure()
+plt.scatter(cardinality, variances)
+plt.show()
+
+total_means_sos = sum(means_sum_squares)
+max_variance = max(variances)
+min_cardinality = min(cardinality)
+print(f'Total mean of sum of squares: {total_means_sos}')
+print(f'Max variance: {max_variance}')
+print(f'Min cardinality: {min_cardinality}')
+
+#%% SOS for different k's
+
+mean_soss = []
+ks = [k for k in range(1, 10)]
+for n in ks:
+    model_rolling_avg = TimeSeriesKMeans(n_clusters=n, metric="dtw", max_iter=10)
+    y_ra = model_rolling_avg.fit_predict(pivoted_rolling_average.values)
+    x_ra = rolling_average_df['time_post_id'].unique()
+    metrics.append([
+        n,
+        model_rolling_avg,
+        model_rolling_avg.inertia_
+    ])
+    no_clusters.append(n)
+    inertia.append(model_rolling_avg.inertia_)
+
+    variances = []
+    cardinality = []
+    means_sum_squares = []
+    for u_class in y_ra:
+        discussions_with_class = predicted_classes_ra.loc[predicted_classes_ra['class'] == u_class]
+        discussion_ids_with_class = discussions_with_class.index
+        discussions_df_with_class = rolling_average_df.loc[
+        rolling_average_df['discussion_id'].isin(discussion_ids_with_class)]
+        discussions_pivoted_df_with_class = pivoted_rolling_average.loc[discussion_ids_with_class]
+
+        variances_timeseries = discussions_pivoted_df_with_class.var(axis=0)
+        mean_class_variance = variances_timeseries.mean()
+        variances.append(mean_class_variance)
+        cardinality.append(discussions_pivoted_df_with_class.index.size)
+
+        mean_timeseries = discussions_pivoted_df_with_class.mean(axis=0)
+        diffs_timeseries = discussions_pivoted_df_with_class.sub(mean_timeseries)
+        squared_timeseries = diffs_timeseries.pow(2)
+        sum_time = squared_timeseries.sum(axis=0)
+        mean_sum_squares = sum_time.mean()
+        means_sum_squares.append(mean_sum_squares)
+
+    plt.figure()
+    plt.scatter(cardinality, variances)
+    plt.show()
+
+    total_means_sos = sum(means_sum_squares)
+    max_variance = max(variances)
+    min_cardinality = min(cardinality)
+    # mean_soss.append(total_means_sos)
+    mean_soss.append(sum(variances))
+
+plt.plot(ks, mean_soss)
+plt.show()

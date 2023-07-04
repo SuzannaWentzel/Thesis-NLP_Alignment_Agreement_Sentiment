@@ -1,125 +1,79 @@
 #%% imports
-from Helpers import read_csv, print_t, print_i
-from datetime import datetime
-from Models.Discussion import Discussion
-from Models.Post import Post
-import re
-import copy
-from linguistic_alignment_analysis.compute_lexical_word_alignment import preprocess_message_lexical_word, \
-    adapted_LLA
+from Helpers import print_t, print_i, store_data
 import pandas as pd
-from main import store_data
 import matplotlib.pyplot as plt
 from tslearn.clustering import TimeSeriesKMeans
 import numpy as np
-from numpy.polynomial import Chebyshev
+import pickle
+from nltk.tokenize import word_tokenize
+from nltk.corpus import wordnet, stopwords
+import nltk
+from nltk.stem import WordNetLemmatizer
+import string
 
-__datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_four_posts.csv'
-__preprocessing_adapted_LLA_avg_linear__ = 'AlignmentData/preprocessing_LLA_alignment_linear.csv'
-__pickle_path_preprocessed_linear__ = './PickleData/preprocessed_linear'
+
+
+# __preprocessing_adapted_LLA_avg_linear__ = 'AlignmentData/preprocessing_LLA_alignment_linear.csv'
+__pickle_path_preprocessed__ = './PickleData/preprocessed_time_based_linear'
 __pickle_path_df_lexical_word_preprocessed_linear__ = './PickleData/preprocessed_df_lexical_word_linear'
+__pickle_path_preprocessed_lexical_alignment__ = './PickleData/preprocessed_lexical_alignment_time_based_linear'
 __csv_alignment_data__ = './AlignmentData/lexical_alignment_all.csv'
 
 
-
-#%% Read data
-data = read_csv(__datapath__)
-
-
-#%% Run preprocessing
-
-# Converts discussion dataframe to list of objects
-print_t('Converting dataframe into discussions')
+#%% Reset discussions (just necessary for python console)
 discussions = {}
-discussion_indices = data['discussion_id'].unique()
-for i in discussion_indices:
-    discussion_df = data.loc[data['discussion_id'] == i]
-    posts = {}
-    for index, row in discussion_df.iterrows():
-        date = datetime.strptime(str(row['creation_date']), "%Y-%m-%d %H:%M:%S")
-        post = Post(row['discussion_id'], row['post_id'], row['text'], row['parent_post_id'], row['author_id'], date)
-        posts[row['post_id']] = post
-    discussion = Discussion(i, posts)
-    discussions[i] = discussion
-print_i('Converted df into discussions')
-
-# Remove empty discussions
-print_t('Removing discussions with empty messages')
-empty_discussion_indices = []
-for i in discussions.keys():
-    discussion = discussions[i]
-    for j in discussion.posts.keys():
-        post = discussion.posts[j]
-        text_ = post.message
-        if not text_ or not isinstance(text_, str):
-            # message has no text, remove discussion.
-            empty_discussion_indices.append(discussion.discussion_id)
-
-print_i('Removing ' + str(len(empty_discussion_indices)) + 'discussions...')
-stripped_discussions = {key: value for key, value in zip(discussions.keys(), discussions.values()) if value.discussion_id not in empty_discussion_indices }
-
-print_i('Removed empty discussions, ' + str(len(stripped_discussions.keys())) + ' discussions left')
-
-# Replace URLs
-print_t('Replacing URLs with [URL] tags')
-for i in stripped_discussions.keys():
-    discussion = stripped_discussions[i]
-    for j in discussion.posts.keys():
-        post = discussion.posts[j]
-        message = re.sub('http[s]?://\S+', '[URL]', post.message)
-        message = re.sub('www.\S+', '[URL]', message)
-        post.update_message(message)
-print_i('replaced URLs with [URL] tags')
-
-replaced_urls = copy.deepcopy(stripped_discussions)
-
-# Get linear threads
-print_t('getting linear discussions')
-# posts are with post_id already ordered by date in discussions
-# create thread with all previous posts
-for i in replaced_urls.keys():
-    discussion = replaced_urls[i]
-    post_list = list(discussion.posts.keys())
-    for j in discussion.posts.keys():
-        post = discussion.posts[j]
-        history = post_list[:post_list.index(j)]
-        post.set_thread(history)
-
-print_i('got linear discussions')
-
-# Merge consecutive messages
-print_t('merging consecutive messages')
-# Find message where previous message is of the same author
-for i in replaced_urls.keys():
-    discussion = replaced_urls[i]
-    to_remove_posts = []
-    reversed_indices = reversed(list(discussion.posts.keys()))
-    for j in reversed_indices:
-        post = discussion.posts[j]
-        if len(post.thread) > 0:
-            previous_post_index = post.thread[-1]
-            previous_post = discussion.posts[previous_post_index]
-            if post.username == previous_post.username:
-                # Add message text to previous message
-                new_message = previous_post.message + post.message
-                previous_post.update_message(new_message)
-                # Keep track of this message id and the new (previous) id
-                to_remove_posts.append(j)
-
-    # Replace all thread histories where that id occured with the previous message id to keep the threads intact
-    for k in to_remove_posts:
-        del discussion.posts[k]
-
-    for j in discussion.posts.keys():
-        post = discussion.posts[j]
-        new_threads = [indx for indx in post.thread if indx not in to_remove_posts]
-        post.set_thread(new_threads)
-
-print_i('merged consecutive messages')
 
 
-#%% store preprocessed data
-store_data(replaced_urls, __pickle_path_preprocessed_linear__)
+#%% Load preprocessed data (see preprocessing.py)
+print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_preprocessed__))
+store_file = open(__pickle_path_preprocessed__, 'rb')
+discussions = pickle.load(store_file)
+store_file.close()
+print_i('Loaded data from pickle')
+
+
+#%% Load preprocessing functions for lexical word
+def get_wordnet_pos(treebank_tag):
+    """
+        Returns the wordnet version of the treebank POS tag
+    """
+    if treebank_tag.startswith('J'):
+        return wordnet.ADJ
+    elif treebank_tag.startswith('V'):
+        return wordnet.VERB
+    elif treebank_tag.startswith('N'):
+        return wordnet.NOUN
+    elif treebank_tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return None     # for easy if-statement
+
+
+def preprocess_message_lexical_word(post):
+    """
+    Preprocesses text posts before applying LILLA, by tokenizing, lowercasing and removing separate punctuation tokens.
+    :param post: message to preprocess
+    :return: preprocessed message: list of lemmas
+    """
+    # Tokenize post
+    tokens = word_tokenize(post)
+    # Remove tokens that exist solely of punctuation and remove stopwords
+    stop_words = set(stopwords.words('english'))
+    # post_punctuation_stopwords_removed = [token.lower() for token in tokens if token not in string.punctuation and token not in stop_words]
+    post_stopwords_removed = [token.lower() for token in tokens if token not in stop_words]
+    # Apply POS
+    tagged = nltk.pos_tag(post_stopwords_removed)
+    # Get lemmas
+    lemmatizer = WordNetLemmatizer()
+    lemmas = []
+    for word, tag in tagged:
+        wntag = get_wordnet_pos(tag)
+        if wntag is None:  # not supply tag in case of None
+            lemmas.append(lemmatizer.lemmatize(word))
+        else:
+            lemmas.append(lemmatizer.lemmatize(word, pos=wntag))
+
+    return lemmas
 
 
 #%% Preprocess messages for lexical alignment
@@ -127,9 +81,9 @@ print_t('preprocessing messages')
 preprocessed_posts = {}
 # get all the preprocessed posts
 data = []
-for i in replaced_urls.keys():
-    print(f'Preprocessing for lexical word: {i} out of {len(replaced_urls.keys())}')
-    discussion = replaced_urls[i]
+for i in discussions.keys():
+    print(f'Preprocessing for lexical word: {i} out of {len(discussions.keys())}')
+    discussion = discussions[i]
     for j in discussion.posts.keys():
         post = discussion.posts[j]
         preprocessed = preprocess_message_lexical_word(post.message)
@@ -150,12 +104,63 @@ df.to_pickle(__pickle_path_df_lexical_word_preprocessed_linear__)
 print_i('stored preprocessing data')
 
 
+#%% Removing empty messages (when only consisted of exclamations or stopwords or a combination
+for i in discussions.keys():
+    discussion = discussions[i]
+    to_remove_posts = []
+    for j in discussion.posts.keys():
+        post = discussion.posts[j]
+        preprocessed_message = preprocessed_posts[str(i) + '-' + str(j)]
+        if len(preprocessed_message) == 0:
+            print_i(f'Found post to remove in discussion_id {i} and post_id {j} ({post.post_id})')
+            to_remove_posts.append(post.post_id)
+
+    # Remove the posts
+    for j in to_remove_posts:
+        del discussion.posts[j]
+
+    # update threads to not include the removed messages
+    for j in discussion.posts.keys():
+        post = discussion.posts[j]
+        new_thread = [post_id for post_id in post.thread if post_id not in to_remove_posts]
+        post.set_thread(new_thread)
+
+
+#%% Store discussions preprocessed for lexical alignment analysis
+store_data(discussions, __pickle_path_preprocessed_lexical_alignment__)
+
+
+#%% Remove discussions that have now less than two authors with at least 4 posts
+# discussions_to_remove = []
+# for i in discussions.keys():
+#     author_list = {}
+#     discussion = discussions[i]
+#     for j in discussion.posts.keys():
+#         post = discussion.posts[j]
+#         if not author_list[post.username]:
+#             author_list[post.username] = 1
+#         else:
+#             author_list[post.username] += 1
+#
+#     authors_enough = 0
+#     for a in author_list.keys():
+#         if author_list[a] >= 4:
+#             authors_enough += 1
+#
+#     if authors_enough < 2:
+#         discussions_to_remove.append(i)
+#
+# print_i(f'Discussions to remove: {discussions_to_remove}')
+
+# for i in discussions_to_remove:
+#     del discussions[i]
+
 #%% Compute alignment
 print_t('computing lexical word alignment for all messages and all of their parents')
 data_alignment = []
-for i in replaced_urls.keys():
+for i in discussions.keys():
     print('computing alignment', i)
-    discussion = replaced_urls[i]
+    discussion = discussions[i]
     discussion_df = df.loc[df['discussion_id'] == i]
     # print('1', discussion_df)
 
@@ -192,8 +197,6 @@ print('[TASK] storing alignment data')
 alignment_df = pd.DataFrame(data_alignment, columns=['discussion_id', 'post_id', 'lexical_word_alignment'])
 alignment_df.to_csv(__csv_alignment_data__)
 print('[INFO] task completed')
-
-
 
 
 #%% Plot data
@@ -376,7 +379,7 @@ rolling_average_df = pd.DataFrame(data_rolling_average, columns=['discussion_id'
 
 #%% Apply clustering to rolling average
 pivoted_rolling_average = rolling_average_df.pivot(index='discussion_id', columns='time_post_id')
-model_rolling_avg = TimeSeriesKMeans(n_clusters=10, metric="dtw", max_iter=10)
+model_rolling_avg = TimeSeriesKMeans(n_clusters=15, metric="dtw", max_iter=10)
 y_ra = model_rolling_avg.fit_predict(pivoted_rolling_average.values)
 x_ra = rolling_average_df['time_post_id'].unique()
 
@@ -385,8 +388,8 @@ predicted_classes_ra = pd.DataFrame(data=y_ra, index=pivoted_rolling_average.ind
 unique_classes_ra = predicted_classes_ra['class'].unique()
 
 fig, axs = plt.subplots(len(unique_classes_ra))
-fig.subplots_adjust(hspace=0.3)
-fig.set_size_inches(8.5, 10)
+fig.subplots_adjust(hspace=1)
+fig.set_size_inches(8.5, 50)
 
 for u_class in unique_classes_ra:
     ax = axs[u_class]
@@ -409,3 +412,98 @@ axs[len(unique_classes_ra)-1].set_xlabel('Posts in time')
 
 fig.suptitle('Alignment over time per found class')
 fig.show()
+
+
+#%% Get discussion length
+discussion_length = []
+for d_idx in unique_disc_idxs:
+    discussion = alignment_df.loc[alignment_df['discussion_id'] == d_idx]
+    discussion_length.append([
+        d_idx,
+        len(discussion)
+    ])
+
+length_df = pd.DataFrame(discussion_length, columns=['discussion_id', 'no_posts'])
+
+percentiles = length_df.describe(percentiles=[.1, .2, .3, .4, .5, .6, .7, .8, .9, 1])
+print(percentiles)
+
+#%% Get bins
+count_discussions_per_length = length_df.groupby('no_posts').count().rename(columns={'discussion_id':'count'})
+total_discussion_count = length_df.shape[0]
+
+bin_count = 5
+bin_threshold = total_discussion_count / bin_count
+
+lengths_for_bins = []
+lengths_for_bin = []
+bin_sizes = []
+bin_disc_count = 0
+for i, row in count_discussions_per_length.iterrows():
+    bin_disc_count += row['count']
+    lengths_for_bin.append(i)
+
+    if bin_disc_count >= bin_threshold:
+        lengths_for_bins.append(lengths_for_bin)
+        lengths_for_bin = []
+        bin_sizes.append(bin_disc_count)
+        bin_disc_count = 0
+
+lengths_for_bins.append(lengths_for_bin)
+bin_sizes.append(bin_disc_count)
+del i, row, lengths_for_bin, bin_disc_count
+
+
+
+# %% SOS for different k's for each bin
+
+# Go through length bins
+for bin_lengths in lengths_for_bins:
+    disc_ids_with_length = length_df.loc[length_df['no_posts'].isin(bin_lengths)]['discussion_id'].unique()
+    discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(disc_ids_with_length)]
+    pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
+
+    # for each bin, try out different ks and compute mean sum of squares
+    mean_soss = []
+    ks = [k for k in range(1, 10)]
+    for n in ks:
+        model_rolling_avg = TimeSeriesKMeans(n_clusters=n, metric="dtw", max_iter=10)
+        y_ra = model_rolling_avg.fit_predict(pivoted_discussions_in_bin_length.values)
+        x_ra = discussions_in_bin_length['time_post_id'].unique()
+
+        predicted_classes_ra = pd.DataFrame(data=y_ra, index=pivoted_discussions_in_bin_length.index, columns=['class'])
+        unique_classes_ra = predicted_classes_ra['class'].unique()
+
+        variances = []
+        cardinality = []
+        means_sum_squares = []
+        for u_class in y_ra:
+            discussions_with_class = predicted_classes_ra.loc[predicted_classes_ra['class'] == u_class]
+            discussion_ids_with_class = discussions_with_class.index
+            discussions_df_with_class = discussions_in_bin_length.loc[
+                discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+            discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+            variances_timeseries = discussions_pivoted_df_with_class.var(axis=0)
+            mean_class_variance = variances_timeseries.mean()
+            variances.append(mean_class_variance)
+            cardinality.append(discussions_pivoted_df_with_class.index.size)
+
+            mean_timeseries = discussions_pivoted_df_with_class.mean(axis=0)
+            diffs_timeseries = discussions_pivoted_df_with_class.sub(mean_timeseries)
+            squared_timeseries = diffs_timeseries.pow(2)
+            sum_time = squared_timeseries.sum(axis=0)
+            mean_sum_squares = sum_time.mean()
+            means_sum_squares.append(mean_sum_squares)
+
+        total_means_sos = sum(means_sum_squares)
+        max_variance = max(variances)
+        min_cardinality = min(cardinality)
+        # mean_soss.append(total_means_sos)
+        mean_soss.append(sum(variances))
+
+    plt.plot(ks, mean_soss)
+    plt.suptitle(f'Clustering for bin length starting from {bin_lengths[0]}')
+    plt.savefig('Results/Clustering/5_bins/line_sos_bin_' + str(bin_lengths[0]))
+    plt.show()
+

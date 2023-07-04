@@ -3,6 +3,7 @@ from Models.Discussion import Discussion
 from Models.Post import Post
 from datetime import datetime
 import re
+import pickle
 
 
 __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_four_posts.csv'
@@ -87,6 +88,8 @@ for i in discussions.keys():
 #%% Merge consecutive messages
 print_t('merging consecutive or empty messages')
 # Find message where previous message is of the same author
+to_remove_posts_total = []
+to_remove_posts_from_discussions = set()
 for i in discussions.keys():
     discussion = discussions[i]
     to_remove_posts = []
@@ -102,6 +105,8 @@ for i in discussions.keys():
                 previous_post.update_message(new_message)
                 # Keep track of this message id and the new (previous) id
                 to_remove_posts.append(j)
+                to_remove_posts_total.append(j)
+                to_remove_posts_from_discussions.add(i)
 
     # Replace all thread histories where that id occured with the previous message id to keep the threads intact
     for k in to_remove_posts:
@@ -112,6 +117,7 @@ for i in discussions.keys():
         new_threads = [indx for indx in post.thread if indx not in to_remove_posts]
         post.set_thread(new_threads)
 
+print_i(f'Found {len(to_remove_posts_total)} posts to merge from {len(to_remove_posts_from_discussions)} discussions')
 print_i('merged consecutive messages')
 
 
@@ -127,6 +133,46 @@ for i in discussions.keys():
 print_i('replaced URLs with [URL] tags')
 
 
+#%% Remove outlying discussions
+print_t('Removing outliers in time-based overlap')
+outlier_ids = [2763, 5530, 5884]
+for k in outlier_ids:
+    print_i(f'Removed discussion: {k}')
+    del discussions[k]
+
+print_i('Removed outliers in time-based overlap')
+print_i(f'Amount of discussions left: {len(discussions.keys())}')
+
+
+#%% Remove discussions that have now less than two authors with at least 4 posts
+print_t('Removing discussions that have less than two authors with at least 4 posts')
+discussions_to_remove = []
+for i in discussions.keys():
+    author_list = {}
+    discussion = discussions[i]
+    for j in discussion.posts.keys():
+        post = discussion.posts[j]
+        if not post.username in author_list.keys():
+            author_list[post.username] = 1
+        else:
+            author_list[post.username] += 1
+
+    authors_enough = 0
+    for a in author_list.keys():
+        if author_list[a] >= 4:
+            authors_enough += 1
+
+    if authors_enough < 2:
+        discussions_to_remove.append(i)
+
+print_i(f'Found {len(discussions_to_remove)} discussions to remove: {discussions_to_remove}')
+
+print_t('Removing too short discussions')
+for i in discussions_to_remove:
+    del discussions[i]
+
+print_i('Removed too short discussions')
+print_i(f'Amount of discussions left: {len(discussions.keys())}')
+
 #%% store preprocessed data
 store_data(discussions, __pickle_path_preprocessed_time_based_linear__)
-
