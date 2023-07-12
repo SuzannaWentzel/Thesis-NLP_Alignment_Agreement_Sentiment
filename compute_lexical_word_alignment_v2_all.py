@@ -10,7 +10,7 @@ from nltk.corpus import wordnet, stopwords
 import nltk
 from nltk.stem import WordNetLemmatizer
 import string
-
+import math
 
 
 # __preprocessing_adapted_LLA_avg_linear__ = 'AlignmentData/preprocessing_LLA_alignment_linear.csv'
@@ -18,13 +18,12 @@ __pickle_path_preprocessed__ = './PickleData/preprocessed_time_based_linear'
 __pickle_path_df_lexical_word_preprocessed_linear__ = './PickleData/preprocessed_df_lexical_word_linear'
 __pickle_path_preprocessed_lexical_alignment__ = './PickleData/preprocessed_lexical_alignment_time_based_linear'
 __csv_alignment_data__ = './AlignmentData/lexical_alignment_all.csv'
-
-
-#%% Reset discussions (just necessary for python console)
-discussions = {}
+__pickle_path_best_alignment_clustering_data__ = './PickleData/best_alignment_clustering_data'
 
 
 #%% Load preprocessed data (see preprocessing.py)
+# Reset discussions (just necessary for python console)
+discussions = {}
 print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_preprocessed__))
 store_file = open(__pickle_path_preprocessed__, 'rb')
 discussions = pickle.load(store_file)
@@ -129,6 +128,13 @@ for i in discussions.keys():
 #%% Store discussions preprocessed for lexical alignment analysis
 store_data(discussions, __pickle_path_preprocessed_lexical_alignment__)
 
+#%% Load prerprocessed discussions
+discussions = {}
+print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_preprocessed_lexical_alignment__))
+store_file = open(__pickle_path_preprocessed_lexical_alignment__, 'rb')
+discussions = pickle.load(store_file)
+store_file.close()
+print_i('Loaded data from pickle')
 
 #%% Remove discussions that have now less than two authors with at least 4 posts
 # discussions_to_remove = []
@@ -199,6 +205,9 @@ alignment_df.to_csv(__csv_alignment_data__)
 print('[INFO] task completed')
 
 
+#%% Load alignment data
+alignment_df = pd.read_csv(__csv_alignment_data__)
+
 #%% Plot data
 discussion_length = []
 unique_disc_idxs = alignment_df['discussion_id'].unique()
@@ -208,14 +217,16 @@ for d_idx in unique_disc_idxs:
     alignment_vals = discussion['lexical_word_alignment']
     p_idxs = range(1, len(alignment_vals) + 1)
 
-    plt.plot(p_idxs, alignment_vals)
+    plt.plot(p_idxs, alignment_vals, linewidth=0.5)
     # plt.scatter(p_idxs, alignment_vals, color='#d74a94', s=1)
 
 plt.xlabel('time (in posts)')
-plt.xlim((0, 331))
-plt.ylabel('Time-based word repetition')
+plt.xlim((0, 1103))
+plt.ylim((0, 1))
+plt.ylabel('Time-based word overlap')
+plt.suptitle('Word overlap over time')
+plt.savefig('Results/Lexical_word_alignment/Time/line_alignment_time_all.png')
 plt.show()
-# plt.savefig(storage_path)
 
 
 #%% Get average alignment
@@ -364,16 +375,17 @@ for d_idx in unique_disc_idxs:
     alignment_vals = discussion['lexical_word_alignment']
     p_idxs = range(1 + (window_size//2), len(alignment_vals) + 1 - (window_size//2))
     rolling_averages = rolling_average(alignment_vals.values, n=window_size)
-    plt.plot(p_idxs, rolling_averages)
+    plt.plot(p_idxs, rolling_averages, linewidth=0.5)
     data_rolling_average_disc = [[d_idx, p_idxs[i], rolling_averages[i]] for i in range(0, len(p_idxs))]
     data_rolling_average += data_rolling_average_disc
 
 plt.xlabel('time (in posts)')
-plt.xlim((0, 331))
+plt.xlim((0, 1103))
 plt.ylim((0, 1))
-plt.ylabel('Rolling average of time-based word repetition')
+plt.ylabel('Rolling average of time-based word overlap')
+plt.suptitle('Rolling average of word overlap over time')
+plt.savefig('Results/Lexical_word_alignment/Time/line_alignment_RA_time_all.png')
 plt.show()
-# plt.savefig(storage_path)
 
 rolling_average_df = pd.DataFrame(data_rolling_average, columns=['discussion_id', 'time_post_id', 'rolling_average'])
 
@@ -454,18 +466,46 @@ bin_sizes.append(bin_disc_count)
 del i, row, lengths_for_bin, bin_disc_count
 
 
+#%% Last bin should be split into multiple, too large of a variance in discussion lengths
+# last_bin = lengths_for_bins[-1]
+# last_bin_start = int(last_bin[0])
+# last_bin_threshold = 50
+# bin_threshold = last_bin_start + last_bin_threshold
+# del lengths_for_bins[-1]
+#
+# lengths_for_bin = []
+# for i in last_bin:
+#     if i >= bin_threshold and len(lengths_for_bin) >= last_bin_threshold:
+#         lengths_for_bins.append([
+#             lengths_for_bin
+#         ])
+#         lengths_for_bin = []
+#         bin_threshold += last_bin_threshold
+#
+#     lengths_for_bin.append(i)
+
+last_bin = lengths_for_bins[-1]
+del lengths_for_bins[-1]
+
+last_bins = [(87, 137), (137, 187), (187, 237), (237, 287)] # TODO: not hardcode
+for bin in last_bins:
+    lengths_for_bin = [i for i in range(bin[0], bin[1]) if i in last_bin]
+    lengths_for_bins.append(lengths_for_bin)
+
 
 # %% SOS for different k's for each bin
 
 # Go through length bins
+bin_counter = 0
 for bin_lengths in lengths_for_bins:
+    bin_counter += 1
     disc_ids_with_length = length_df.loc[length_df['no_posts'].isin(bin_lengths)]['discussion_id'].unique()
     discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(disc_ids_with_length)]
     pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
 
     # for each bin, try out different ks and compute mean sum of squares
-    mean_soss = []
-    ks = [k for k in range(1, 10)]
+    inertias = []
+    ks = [k for k in range(1, 11)]
     for n in ks:
         model_rolling_avg = TimeSeriesKMeans(n_clusters=n, metric="dtw", max_iter=10)
         y_ra = model_rolling_avg.fit_predict(pivoted_discussions_in_bin_length.values)
@@ -474,36 +514,190 @@ for bin_lengths in lengths_for_bins:
         predicted_classes_ra = pd.DataFrame(data=y_ra, index=pivoted_discussions_in_bin_length.index, columns=['class'])
         unique_classes_ra = predicted_classes_ra['class'].unique()
 
-        variances = []
-        cardinality = []
-        means_sum_squares = []
-        for u_class in y_ra:
+        inertias.append(model_rolling_avg.inertia_)
+
+        # Plot these classes to see how they are doing
+        fig, axs = plt.subplots(len(unique_classes_ra), figsize=(5+(1 * (bin_lengths[-1] / 50)), 8*n))
+        fig.tight_layout()
+        fig.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.1)
+
+        for u_class in unique_classes_ra:
             discussions_with_class = predicted_classes_ra.loc[predicted_classes_ra['class'] == u_class]
             discussion_ids_with_class = discussions_with_class.index
             discussions_df_with_class = discussions_in_bin_length.loc[
                 discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
             discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
 
-            variances_timeseries = discussions_pivoted_df_with_class.var(axis=0)
-            mean_class_variance = variances_timeseries.mean()
-            variances.append(mean_class_variance)
-            cardinality.append(discussions_pivoted_df_with_class.index.size)
+            ax = axs
+            if n > 1:
+                ax = axs[u_class]
+            ax.set_ylim((0, 1))
+            ax.set_xlim((0, bin_lengths[-1]))
+            for d_idx in discussion_ids_with_class:
+                discussion = discussions_in_bin_length.loc[discussions_in_bin_length['discussion_id'] == d_idx]
+                ax.plot(discussion['time_post_id'], discussion['rolling_average'], linewidth=0.7)
+            trend = discussions_pivoted_df_with_class.mean()
+            mean_per_post = trend.reset_index()
+            ax.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+            # ax.set_xticks([])
 
-            mean_timeseries = discussions_pivoted_df_with_class.mean(axis=0)
-            diffs_timeseries = discussions_pivoted_df_with_class.sub(mean_timeseries)
-            squared_timeseries = diffs_timeseries.pow(2)
-            sum_time = squared_timeseries.sum(axis=0)
-            mean_sum_squares = sum_time.mean()
-            means_sum_squares.append(mean_sum_squares)
+        if n > 1:
+            axs[int(np.median(unique_classes_ra))].set_ylabel(
+                'Time-based word repetition per class with rolling averages')
+            axs[len(unique_classes_ra) - 1].set_xlabel('Posts in time')
+        else:
+            axs.set_ylabel(
+                'Time-based word repetition per class with rolling averages')
+            axs.set_xlabel('Posts in time')
 
-        total_means_sos = sum(means_sum_squares)
-        max_variance = max(variances)
-        min_cardinality = min(cardinality)
-        # mean_soss.append(total_means_sos)
-        mean_soss.append(sum(variances))
+        fig.suptitle(f'Alignment over time for bin {bin_counter}, k={n}')
+        fig.savefig(f'Results/Clustering/5_bins_and_last_splitted/line_alignment_bin_{bin_counter}_k_{n}')
+        fig.show()
 
-    plt.plot(ks, mean_soss)
-    plt.suptitle(f'Clustering for bin length starting from {bin_lengths[0]}')
-    plt.savefig('Results/Clustering/5_bins/line_sos_bin_' + str(bin_lengths[0]))
-    plt.show()
+    fig_elbow, ax_elbow = plt.subplots(figsize=(4, 4))
+    fig_elbow.tight_layout()
+    fig_elbow.subplots_adjust(top=0.9, left=0.2, right=0.95, bottom=0.15)
+    ax_elbow.plot(ks, inertias)
+    ax_elbow.set_xlabel('number of clusters (k)')
+    ax_elbow.set_ylabel('inertia')
+    fig_elbow.suptitle(f'Clustering for bin {bin_counter} (length {bin_lengths[0]} - {bin_lengths[-1]})')
+    fig_elbow.savefig(f'Results/Clustering/5_bins_and_last_splitted/line_sos_bin_{bin_counter}')
+    fig_elbow.show()
 
+
+#%% Cluster per bin
+ks_per_bin = [4, 6, 5, 5, 4, 5, 5, 4]
+tries = 5
+best_models = []
+all_models = []
+
+# Go through length bins
+for i, bin_lengths in enumerate(lengths_for_bins):
+    disc_ids_with_length = length_df.loc[length_df['no_posts'].isin(bin_lengths)]['discussion_id'].unique()
+    discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(disc_ids_with_length)]
+    pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
+
+    # for each bin, try out different ks and compute mean sum of squares
+    inertias = []
+    k = ks_per_bin[i]
+    best_model = {}
+
+    for n in range(0, tries):
+        model_rolling_avg = TimeSeriesKMeans(n_clusters=k, metric="dtw", max_iter=10)
+        y_ra = model_rolling_avg.fit_predict(pivoted_discussions_in_bin_length.values)
+        x_ra = discussions_in_bin_length['time_post_id'].unique()
+
+        predicted_classes_ra = pd.DataFrame(data=y_ra, index=pivoted_discussions_in_bin_length.index, columns=['class'])
+        unique_classes_ra = predicted_classes_ra['class'].unique()
+
+        inertia = model_rolling_avg.inertia_
+        inertias.append(inertia)
+        all_models.append([
+            i,
+            n,
+            model_rolling_avg,
+            y_ra,
+            predicted_classes_ra,
+            inertia,
+        ])
+
+        # Keep this model if it performs better than a previously stored one
+        if len(best_model.keys()) == 0:
+            best_model['model'] = model_rolling_avg
+            best_model['y_ra'] = y_ra
+            best_model['predicted_classes_ra'] = predicted_classes_ra
+            best_model['inertia'] = inertia
+            best_model['try_counter'] = n
+        elif inertia < best_model['inertia']:
+            best_model['model'] = model_rolling_avg
+            best_model['y_ra'] = y_ra
+            best_model['predicted_classes_ra'] = predicted_classes_ra
+            best_model['inertia'] = inertia
+            best_model['try_counter'] = n
+
+        # Plot his attempt and store to be able to compare later
+        fig, axs = plt.subplots(math.ceil(len(unique_classes_ra)/2), 2, figsize=(8 + (1 * (bin_lengths[-1] / 50)), 4 * k))
+        fig.tight_layout()
+        fig.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.1)
+
+        for i_class, u_class in enumerate(unique_classes_ra):
+            discussions_with_class = predicted_classes_ra.loc[predicted_classes_ra['class'] == u_class]
+            discussion_ids_with_class = discussions_with_class.index
+            discussions_df_with_class = discussions_in_bin_length.loc[
+                discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+            discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+            ax_x = math.floor(i_class/2)
+            ax_y = i_class % 2
+            ax = axs[ax_x, ax_y]
+            ax.set_ylim((0, 1))
+            ax.set_xlim((0, bin_lengths[-1]))
+            for d_idx in discussion_ids_with_class:
+                discussion = discussions_in_bin_length.loc[discussions_in_bin_length['discussion_id'] == d_idx]
+                ax.plot(discussion['time_post_id'], discussion['rolling_average'], linewidth=0.7)
+            trend = discussions_pivoted_df_with_class.mean()
+            mean_per_post = trend.reset_index()
+            ax.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+            # ax.set_xticks([])
+
+        axs[math.floor((len(unique_classes_ra)-1)/2/2), 0].set_ylabel(
+            'Time-based word repetition per class with rolling averages')
+        axs[math.floor((len(unique_classes_ra)-1)/2), 0].set_xlabel('Posts in time')
+        axs[math.floor((len(unique_classes_ra)-1)/2), 1].set_xlabel('Posts in time')
+
+        fig.suptitle(f'Alignment over time for bin {i+1}, attempt {n+1}')
+        fig.savefig(f'Results/Clustering/Tries/line_alignment_bin_{i+1}_attempt_{n+1}')
+        fig.show()
+
+    # store the best model
+    best_models.append(best_model)
+
+    # Plot and save the best clustering:
+    best_model_y_ra = best_model['y_ra']
+    best_model_predicted_classes_ra = best_model['predicted_classes_ra']
+    best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
+    best_n = best_model['try_counter']
+
+    fig_best, axs_best = plt.subplots(math.ceil(len(best_model_unique_classes_ra)/2), 2, figsize=(8 + (1 * (bin_lengths[-1] / 50)), 4 * k))
+    fig_best.tight_layout()
+    fig_best.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.1)
+
+    for i_class, u_class in enumerate(best_model_unique_classes_ra):
+        discussions_with_class = best_model_predicted_classes_ra.loc[best_model_predicted_classes_ra['class'] == u_class]
+        discussion_ids_with_class = discussions_with_class.index
+        discussions_df_with_class = discussions_in_bin_length.loc[
+            discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+        discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+        ax_x = math.floor(i_class/2)
+        ax_y = i_class % 2
+        ax = axs_best[ax_x, ax_y]
+        ax.set_ylim((0, 1))
+        ax.set_xlim((0, bin_lengths[-1]))
+        for d_idx in discussion_ids_with_class:
+            discussion = discussions_in_bin_length.loc[discussions_in_bin_length['discussion_id'] == d_idx]
+            ax.plot(discussion['time_post_id'], discussion['rolling_average'], linewidth=0.7)
+        trend = discussions_pivoted_df_with_class.mean()
+        mean_per_post = trend.reset_index()
+        ax.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+        # ax.set_xticks([])
+
+    axs_best[math.floor((len(best_model_unique_classes_ra)-1)/2/2), 0].set_ylabel(
+        'Time-based word repetition per class with rolling averages')
+    axs_best[math.floor((len(best_model_unique_classes_ra)-1)/2), 0].set_xlabel('Posts in time')
+    axs_best[math.floor((len(best_model_unique_classes_ra)-1)/2), 1].set_xlabel('Posts in time')
+
+    fig_best.suptitle(f'Alignment over time for bin {i+1} (lengths {bin_lengths[0]}-{bin_lengths[-1]})')
+    fig_best.savefig(f'Results/Clustering/Best_Result/line_alignment_bin_{i+1}_attempt_{best_n+1}')
+    fig_best.show()
+
+
+#%% Get amount of discussions per bin
+for i, bin_lengths in enumerate(lengths_for_bins):
+    bin_counter += 1
+    disc_ids_with_length = length_df.loc[length_df['no_posts'].isin(bin_lengths)]['discussion_id'].unique()
+    print_i(f'Bin {i + 1}: \t {len(disc_ids_with_length)} discussions')
+
+
+#%% Store best found models
+store_data(best_models, __pickle_path_best_alignment_clustering_data__)

@@ -1,13 +1,15 @@
-from Helpers import read_csv, print_t, print_i, store_data
+from Helpers import read_csv, print_t, print_i
 from Models.Discussion import Discussion
 from Models.Post import Post
 from datetime import datetime
 import re
-import pickle
-from linguistic_alignment_analysis.compute_lexical_word_alignment import preprocess_message_lexical_word
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from nltk.tokenize import word_tokenize
+from nltk.corpus import wordnet, stopwords
+import nltk
+from nltk.stem import WordNetLemmatizer
 
 
 __datapath__ = './Data/discussion_post_text_date_author_parents_more_than_two_authors_with_more_than_four_posts.csv'
@@ -33,23 +35,6 @@ for i in discussion_indices:
     discussion = Discussion(i, posts)
     discussions[i] = discussion
 print_i('Converted df into discussions')
-
-#%% Remove empty discussions
-# print_t('Removing discussions with empty messages')
-# empty_discussion_indices = []
-# for i in discussions.keys():
-#     discussion = discussions[i]
-#     for j in discussion.posts.keys():
-#         post = discussion.posts[j]
-#         text_ = post.message
-#         if not text_ or not isinstance(text_, str):
-#             # message has no text, remove discussion.
-#             empty_discussion_indices.append(discussion.discussion_id)
-#
-# print_i('Removing ' + str(len(empty_discussion_indices)) + 'discussions...')
-# stripped_discussions = {key: value for key, value in zip(discussions.keys(), discussions.values()) if value.discussion_id not in empty_discussion_indices }
-#
-# print_i('Removed empty discussions, ' + str(len(stripped_discussions.keys())) + ' discussions left')
 
 
 #%% Get linear threads
@@ -91,6 +76,8 @@ for i in discussions.keys():
 #%% Merge consecutive messages
 print_t('merging consecutive or empty messages')
 # Find message where previous message is of the same author
+to_remove_posts_total = []
+to_remove_posts_from_discussions = set()
 for i in discussions.keys():
     discussion = discussions[i]
     to_remove_posts = []
@@ -106,6 +93,8 @@ for i in discussions.keys():
                 previous_post.update_message(new_message)
                 # Keep track of this message id and the new (previous) id
                 to_remove_posts.append(j)
+                to_remove_posts_total.append(j)
+                to_remove_posts_from_discussions.add(i)
 
     # Replace all thread histories where that id occured with the previous message id to keep the threads intact
     for k in to_remove_posts:
@@ -116,6 +105,7 @@ for i in discussions.keys():
         new_threads = [indx for indx in post.thread if indx not in to_remove_posts]
         post.set_thread(new_threads)
 
+print_i(f'Found {len(to_remove_posts_total)} posts to merge from {len(to_remove_posts_from_discussions)} discussions')
 print_i('merged consecutive messages')
 
 
@@ -129,6 +119,81 @@ for i in discussions.keys():
         message = re.sub('www.\S+', '[URL]', message)
         post.update_message(message)
 print_i('replaced URLs with [URL] tags')
+
+
+#%% Remove discussions that have now less than two authors with at least 4 posts
+print_t('Removing discussions that have less than two authors with at least 4 posts')
+discussions_to_remove = []
+for i in discussions.keys():
+    author_list = {}
+    discussion = discussions[i]
+    for j in discussion.posts.keys():
+        post = discussion.posts[j]
+        if not post.username in author_list.keys():
+            author_list[post.username] = 1
+        else:
+            author_list[post.username] += 1
+
+    authors_enough = 0
+    for a in author_list.keys():
+        if author_list[a] >= 4:
+            authors_enough += 1
+
+    if authors_enough < 2:
+        discussions_to_remove.append(i)
+
+print_i(f'Found {len(discussions_to_remove)} discussions to remove: {discussions_to_remove}')
+
+print_t('Removing too short discussions')
+for i in discussions_to_remove:
+    del discussions[i]
+
+print_i('Removed too short discussions')
+print_i(f'Amount of discussions left: {len(discussions.keys())}')
+
+
+#%% Load preprocessing functions for lexical word
+def get_wordnet_pos(treebank_tag):
+    """
+        Returns the wordnet version of the treebank POS tag
+    """
+    if treebank_tag.startswith('J'):
+        return wordnet.ADJ
+    elif treebank_tag.startswith('V'):
+        return wordnet.VERB
+    elif treebank_tag.startswith('N'):
+        return wordnet.NOUN
+    elif treebank_tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return None     # for easy if-statement
+
+
+def preprocess_message_lexical_word(post_to_preprocess):
+    """
+    Preprocesses text posts before applying LILLA, by tokenizing, lowercasing and removing separate punctuation tokens.
+    :param post_to_preprocess: message to preprocess
+    :return: preprocessed message: list of lemmas
+    """
+    # Tokenize post
+    tokens = word_tokenize(post_to_preprocess)
+    # Remove tokens that exist solely of punctuation and remove stopwords
+    stop_words = set(stopwords.words('english'))
+    # post_punctuation_stopwords_removed = [token.lower() for token in tokens if token not in string.punctuation and token not in stop_words]
+    post_stopwords_removed = [token.lower() for token in tokens if token not in stop_words]
+    # Apply POS
+    tagged = nltk.pos_tag(post_stopwords_removed)
+    # Get lemmas
+    lemmatizer = WordNetLemmatizer()
+    lemmas = []
+    for word, tag in tagged:
+        wntag = get_wordnet_pos(tag)
+        if wntag is None:  # not supply tag in case of None
+            lemmas.append(lemmatizer.lemmatize(word))
+        else:
+            lemmas.append(lemmatizer.lemmatize(word, pos=wntag))
+
+    return lemmas
 
 
 #%% Preprocess messages for lexical alignment
@@ -232,14 +297,16 @@ for d_idx in unique_disc_idxs:
     alignment_vals = discussion['lexical_word_alignment']
     p_idxs = range(1, len(alignment_vals) + 1)
 
-    plt.plot(p_idxs, alignment_vals)
+    plt.plot(p_idxs, alignment_vals, linewidth=0.5)
     # plt.scatter(p_idxs, alignment_vals, color='#d74a94', s=1)
 
 plt.xlabel('time (in posts)')
-plt.xlim((0, 331))
-plt.ylabel('Time-based word repetition')
+plt.xlim((0, 1103))
+plt.ylim((0, 1))
+plt.ylabel('Time-based word overlap')
+plt.suptitle('Word overlap over time')
+plt.savefig('Results/Lexical_word_alignment/Time/line_alignment_time_all.png')
 plt.show()
-# plt.savefig(storage_path)
 
 
 #%% Get average alignment
@@ -285,7 +352,6 @@ print('alignment spikes: ', discussion_spikes_low.to_string())
 discussion_1 = average_df[average_df['average_alignment'] < average_df['average_alignment'].quantile(.01)]
 sample_discussion_1 = discussion_1.sample(n=10, random_state=1)
 print('Random sample of discussions with alignment in first percentile: ', sample_discussion_1.to_string())
-
 
 discussion_50 = average_df[(average_df['average_alignment'] < average_df['average_alignment'].quantile(.51)) & (average_df['average_alignment'] > average_df['average_alignment'].quantile(.49))]
 sample_discussion_50 = discussion_50.sample(n=10, random_state=1)
