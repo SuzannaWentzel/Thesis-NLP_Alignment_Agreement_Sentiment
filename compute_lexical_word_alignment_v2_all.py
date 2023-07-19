@@ -19,6 +19,7 @@ __pickle_path_df_lexical_word_preprocessed_linear__ = './PickleData/preprocessed
 __pickle_path_preprocessed_lexical_alignment__ = './PickleData/preprocessed_lexical_alignment_time_based_linear'
 __csv_alignment_data__ = './AlignmentData/lexical_alignment_all.csv'
 __pickle_path_best_alignment_clustering_data__ = './PickleData/best_alignment_clustering_data'
+__pickle_path_bin_ids__ = './PickleData/bin_ids'
 
 
 #%% Load preprocessed data (see preprocessing.py)
@@ -227,6 +228,29 @@ plt.ylabel('Time-based word overlap')
 plt.suptitle('Word overlap over time')
 plt.savefig('Results/Lexical_word_alignment/Time/line_alignment_time_all.png')
 plt.show()
+
+#%% Get alignment distribution for all messages
+print('mean: \t', alignment_df['lexical_word_alignment'].mean())
+print('percentiles: \t', alignment_df['lexical_word_alignment'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, .995, 1]))
+
+fig, (ax1, ax2) = plt.subplots(2)
+
+fig.suptitle('Time-based overlap in discussions')
+fig.subplots_adjust(hspace=0.5)
+
+ax1.set_xlim(0, 1)
+ax2.set_xlim(0, 1)
+ax2.set_yscale('log')
+ax2.set_ylabel('# posts')
+ax2.set_xlabel('Time-based overlap')
+
+ax1.hist(alignment_df['lexical_word_alignment'], bins=np.arange(0, 1, 0.01),
+         color='#d74a94')  # color='#d74a94'  histtype='step'
+ax2.hist(alignment_df['lexical_word_alignment'], bins=np.arange(0, 1, 0.01),
+         color='#d74a94')  # color='#d74a94'  histtype='step'
+
+fig.savefig('Results/Lexical_word_alignment/histo_alignment_messages.png')
+fig.show()
 
 
 #%% Get average alignment
@@ -557,7 +581,7 @@ for bin_lengths in lengths_for_bins:
     fig_elbow, ax_elbow = plt.subplots(figsize=(4, 4))
     fig_elbow.tight_layout()
     fig_elbow.subplots_adjust(top=0.9, left=0.2, right=0.95, bottom=0.15)
-    ax_elbow.plot(ks, inertias)
+    ax_elbow.plot(ks, inertias, color='#d74a94')
     ax_elbow.set_xlabel('number of clusters (k)')
     ax_elbow.set_ylabel('inertia')
     fig_elbow.suptitle(f'Clustering for bin {bin_counter} (length {bin_lengths[0]} - {bin_lengths[-1]})')
@@ -692,6 +716,20 @@ for i, bin_lengths in enumerate(lengths_for_bins):
     fig_best.show()
 
 
+#%% Store best found models
+store_data(best_models, __pickle_path_best_alignment_clustering_data__)
+
+
+#%% Load best found models
+discussions = {}
+print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_best_alignment_clustering_data__))
+store_file = open(__pickle_path_best_alignment_clustering_data__, 'rb')
+best_models = pickle.load(store_file)
+store_file.close()
+print_i('Loaded data from pickle')
+
+
+
 #%% Get amount of discussions per bin
 for i, bin_lengths in enumerate(lengths_for_bins):
     bin_counter += 1
@@ -699,5 +737,12 @@ for i, bin_lengths in enumerate(lengths_for_bins):
     print_i(f'Bin {i + 1}: \t {len(disc_ids_with_length)} discussions')
 
 
-#%% Store best found models
-store_data(best_models, __pickle_path_best_alignment_clustering_data__)
+#%% Get discussion ids per bin
+bin_ids = []
+for bin_lengths in lengths_for_bins:
+    bin_ids.append(length_df.loc[length_df['no_posts'].isin(bin_lengths)]['discussion_id'].unique())
+
+
+#%% Store discussion ids per bin
+store_data(bin_ids, __pickle_path_bin_ids__)
+
