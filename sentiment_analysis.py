@@ -80,7 +80,6 @@ store_data(preprocessed_posts, __pickle_path_preprocessed_sentiment__)
 
 
 #%% Load prerprocessed messages
-discussions = {}
 print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_preprocessed_sentiment__))
 store_file = open(__pickle_path_preprocessed_sentiment__, 'rb')
 preprocessed_posts = pickle.load(store_file)
@@ -734,4 +733,100 @@ for i, bin_ids in enumerate(bins_ids):
 #
 #
 #%% Store best found models
-store_data(best_models, __pickle_path_best_sentiment_clustering_data__)
+store_data(best_models, __pickle_path_best_sentiment_clustering_data__ + '_backup')
+
+
+#%% Load best found models
+print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_best_sentiment_clustering_data__))
+store_file = open(__pickle_path_best_sentiment_clustering_data__, 'rb')
+best_models = pickle.load(store_file)
+store_file.close()
+print_i('Loaded data from pickle')
+
+
+#%% Print graphs of best models
+for i in range(0, 8):
+    bin_ids = bins_ids[i]
+    discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(bin_ids)]
+    pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
+    k = ks_per_bin[i]
+    bin_length = bin_lengths[i]
+
+    # Plot and save the best clustering:
+    best_model = best_models[i]
+    best_model_y_ra = best_model['y_ra']
+    best_model_predicted_classes_ra = best_model['predicted_classes_ra']
+    best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
+    best_n = best_model['try_counter']
+
+    fig_best, axs_best = plt.subplots(math.ceil(len(best_model_unique_classes_ra)/2), 2, figsize=(8 + (1 * (bin_length[1] / 50)), 4 * k))
+    fig_best.tight_layout()
+    fig_best.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.1)
+
+    for i_class, u_class in enumerate(best_model_unique_classes_ra):
+        discussions_with_class = best_model_predicted_classes_ra.loc[best_model_predicted_classes_ra['class'] == u_class]
+        discussion_ids_with_class = discussions_with_class.index
+        discussions_df_with_class = discussions_in_bin_length.loc[
+            discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+        discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+        ax_x = math.floor(i_class/2)
+        ax_y = i_class % 2
+        ax = axs_best[ax_x, ax_y]
+        ax.set_ylim((-1, 1))
+        ax.set_xlim((0, bin_length[1]))
+        for d_idx in discussion_ids_with_class:
+            discussion = discussions_in_bin_length.loc[discussions_in_bin_length['discussion_id'] == d_idx]
+            ax.plot(discussion['time_post_id'], discussion['rolling_average'], linewidth=0.7)
+        trend = discussions_pivoted_df_with_class.mean()
+        mean_per_post = trend.reset_index()
+        ax.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+        # ax.set_xticks([])
+
+    axs_best[math.floor((len(best_model_unique_classes_ra)-1)/2/2), 0].set_ylabel(
+        'Sentiment score per class with rolling averages')
+    axs_best[math.floor((len(best_model_unique_classes_ra)-1)/2), 0].set_xlabel('Posts in time')
+    axs_best[math.floor((len(best_model_unique_classes_ra)-1)/2), 1].set_xlabel('Posts in time')
+
+    fig_best.suptitle(f'Sentiment over time for bin {i+1} (lengths {bin_length[0]}-{bin_length[1]})')
+    fig_best.savefig(f'Results/Sentiment/Clustering/attempt2/best_sentiment_bin_{i+1}_attempt_{best_n+1}')
+    fig_best.show()
+
+
+#%% Get "actual" classes of figures
+ks_per_bin = [4, 6, 5, 5, 4, 5, 5, 4]
+for i in range(0, 8):
+    # Plot and save the best clustering:
+    best_model = best_models[i]
+    best_model_predicted_classes_ra = best_model['predicted_classes_ra']
+    best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
+    print(f'{i+1}: {best_model_unique_classes_ra}')
+
+
+#%% Print discussion
+def pretty_print_discussion(discussion_id):
+    inspect_discussion = discussions[discussion_id]
+    for post_id in inspect_discussion.posts.keys():
+        inspect_post = inspect_discussion.posts[post_id]
+        preprocessed_message = preprocessed_posts[str(inspect_discussion.discussion_id) + '-' + str(inspect_post.post_id)]
+        print(f'postId: {inspect_post.post_id} \t author: {inspect_post.username} \t message: {inspect_post.message} \t preprocessed: {preprocessed_message}')
+
+
+
+
+#%% Inspect low sentiment
+discussion_1 = average_df[average_df['average_sentiment'] < average_df['average_sentiment'].quantile(.01)]
+sample_discussion_1 = discussion_1.sample(n=10, random_state=1)['discussion_id']
+discussion_1_df = sentiment_df.loc[sentiment_df['discussion_id'].isin(sample_discussion_1)]
+
+
+#%% Inspect characteristic sentiment
+discussion_50 = average_df[(average_df['average_sentiment'] < average_df['average_sentiment'].quantile(.51)) & (average_df['average_sentiment'] > average_df['average_sentiment'].quantile(.49))]
+sample_discussion_50 = discussion_50.sample(n=10, random_state=1)
+discussion_50_df = sentiment_df.loc[sentiment_df['discussion_id'].isin(sample_discussion_50['discussion_id'])]
+
+
+#%% Inspect high sentiment
+discussion_99 = average_df[average_df['average_sentiment'] > average_df['average_sentiment'].quantile(.99)]
+sample_discussion_99 = discussion_99.sample(n=10, random_state=1)
+discussion_99_df = sentiment_df.loc[sentiment_df['discussion_id'].isin(sample_discussion_99['discussion_id'])]

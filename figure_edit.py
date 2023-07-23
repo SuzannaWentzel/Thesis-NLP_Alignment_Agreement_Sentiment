@@ -2,10 +2,11 @@ import math
 
 from PIL import Image
 import numpy as np
+import time
 
-file_path = 'D:\Documents-SSD\Interaction Technology\Thesis\Thesis-NLP_Alignment_Agreement_Sentiment\Results\Sentiment\Clustering\Best_Result'
+file_path = 'D:\Documents-SSD\Interaction Technology\Thesis\Thesis-NLP_Alignment_Agreement_Sentiment\Results\Sentiment\Clustering\\attempt2'
 
-image = Image.open(file_path + '\line_alignment_bin_8_attempt_1_edited.png')
+image = Image.open(file_path + '\\best_sentiment_bin_8_attempt_4.png')
 
 hsv_image = image.convert('HSV')
 
@@ -21,4 +22,4 @@ des = Image.fromarray(destaturated)
 viets = Image.fromarray(lowval)
 
 new_image = Image.merge('HSV', (h, des, viets))
-new_image.convert('RGB').save(file_path + '\line_alignment_bin_8_attempt_1_lighter.png')
+new_image.convert('RGB').save(f'{file_path}\\best_sentiment_bin_8_attempt_4_lighter_{time.time()}.png')
