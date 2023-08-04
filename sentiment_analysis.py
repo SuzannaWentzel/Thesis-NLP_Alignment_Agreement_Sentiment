@@ -23,6 +23,7 @@ __pickle_path_preprocessed_sentiment__ = './PickleData/preprocessed_sentiment'
 __csv_sentiment_data__ = './AlignmentData/sentiment.csv'
 __pickle_path_best_sentiment_clustering_data__ = './PickleData/best_sentiment_clustering_data'
 __pickle_path_bin_ids__ = './PickleData/bin_ids'
+__csv_sentiment_class_data__ = './SentimentData/sentiment_classes.csv'
 
 
 #%% Load preprocessed data (see preprocessing.py)
@@ -188,6 +189,8 @@ fig.show()
 
 #%% Get average sentiment
 averages = []
+unique_disc_idxs = sentiment_df['discussion_id'].unique()
+
 for d_idx in unique_disc_idxs:
     print('averaging sentiment', d_idx)
     discussion_df = sentiment_df.loc[sentiment_df['discussion_id'] == d_idx]
@@ -598,8 +601,10 @@ for i, bin_ids in enumerate(bins_ids):
     fig_elbow.show()
 
 
-#%% Cluster per bin
+#%% Set optimal k's for clustering
 ks_per_bin = [6, 5, 7, 6, 8, 6, 7, 6]
+
+#%% Cluster per bin
 tries = 5
 best_models = []
 all_models = []
@@ -794,9 +799,7 @@ for i in range(0, 8):
 
 
 #%% Get "actual" classes of figures
-ks_per_bin = [4, 6, 5, 5, 4, 5, 5, 4]
 for i in range(0, 8):
-    # Plot and save the best clustering:
     best_model = best_models[i]
     best_model_predicted_classes_ra = best_model['predicted_classes_ra']
     best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
@@ -830,3 +833,44 @@ discussion_50_df = sentiment_df.loc[sentiment_df['discussion_id'].isin(sample_di
 discussion_99 = average_df[average_df['average_sentiment'] > average_df['average_sentiment'].quantile(.99)]
 sample_discussion_99 = discussion_99.sample(n=10, random_state=1)
 discussion_99_df = sentiment_df.loc[sentiment_df['discussion_id'].isin(sample_discussion_99['discussion_id'])]
+
+
+#%% Get sentiment data necessary for interplay analysis
+# Loop through bins
+sentiment_discussion_data = []
+class_counter = 0
+for bin_id in range(0, 8):
+    # Get best clustering model of bin
+    best_model = best_models[bin_id]                                                    # Get best model
+    best_model_predicted_classes_ra = best_model['predicted_classes_ra']                # Get predicted classes
+    best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()    # Get unique predicted classes
+
+    # Get data per class
+    for i_class, u_class in enumerate(best_model_unique_classes_ra):
+        discussions_with_class = best_model_predicted_classes_ra.loc[best_model_predicted_classes_ra['class'] == u_class]   # Find discussions with class
+        discussion_ids_with_class = discussions_with_class.index                        # Get discussion ids for discussions in class
+
+        # Get data per discussion
+        for d_idx in discussion_ids_with_class:
+            average_sentiment_value_df = average_df.loc[average_df['discussion_id'] == d_idx]['average_sentiment']
+            average_sentiment_value = average_sentiment_value_df.iloc[0]
+            sentiment_discussion_data.append([
+                d_idx,
+                bin_id,
+                average_sentiment_value,
+                class_counter,
+                u_class
+            ])
+
+        # Update class counter
+        class_counter += 1
+
+# Create df of discussion sentiment data
+print('[TASK] storing sentiment data')
+sentiment_discussion_data_df = pd.DataFrame(sentiment_discussion_data,
+                                  columns=['discussion_id', 'bin_id', 'average_sentiment', 'sentiment_class_overall', 'sentiment_class_in_bin'])
+sentiment_discussion_data_df.to_csv(__csv_sentiment_class_data__)
+print('[INFO] task completed')
+
+
+

@@ -20,6 +20,8 @@ __pickle_path_preprocessed_lexical_alignment__ = './PickleData/preprocessed_lexi
 __csv_alignment_data__ = './AlignmentData/lexical_alignment_all.csv'
 __pickle_path_best_alignment_clustering_data__ = './PickleData/best_alignment_clustering_data'
 __pickle_path_bin_ids__ = './PickleData/bin_ids'
+__csv_alignment_class_data__ = './AlignmentData/alignment_classes.csv'
+
 
 
 #%% Load preprocessed data (see preprocessing.py)
@@ -263,6 +265,8 @@ fig.show()
 
 #%% Get average alignment
 averages = []
+unique_disc_idxs = alignment_df['discussion_id'].unique()
+
 for d_idx in unique_disc_idxs:
     print('averaging alignment', d_idx)
     discussion_df = alignment_df.loc[alignment_df['discussion_id'] == d_idx]
@@ -469,6 +473,8 @@ for d_idx in unique_disc_idxs:
 
 length_df = pd.DataFrame(discussion_length, columns=['discussion_id', 'no_posts'])
 
+
+#%% Get discussion length percentiles
 percentiles = length_df.describe(percentiles=[.1, .2, .3, .4, .5, .6, .7, .8, .9, 1])
 print(percentiles)
 
@@ -891,4 +897,46 @@ discussions_with_class = specific_best_model_predicted_classes.loc[specific_best
 discussion_ids_with_class = discussions_with_class.index
 discussions_df_with_class = discussions_in_bin_length.loc[
     discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+
+
+#%% Get alignment data necessary for interplay analysis
+# Loop through bins
+alignment_discussion_data = []
+class_counter = 0
+for bin_id in range(0, 8):
+    # Get best clustering model of bin
+    best_model = best_models[bin_id]                                                    # Get best model
+    best_model_predicted_classes_ra = best_model['predicted_classes_ra']                # Get predicted classes
+    best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()    # Get unique predicted classes
+
+    # Get data per class
+    for i_class, u_class in enumerate(best_model_unique_classes_ra):
+        discussions_with_class = best_model_predicted_classes_ra.loc[best_model_predicted_classes_ra['class'] == u_class]   # Find discussions with class
+        discussion_ids_with_class = discussions_with_class.index                        # Get discussion ids for discussions in class
+
+        # Get data per discussion
+        for d_idx in discussion_ids_with_class:
+            average_alignment_value_df = average_df.loc[average_df['discussion_id'] == d_idx]['average_alignment']
+            average_alignment_value = average_alignment_value_df.iloc[0]
+            alignment_class = class_counter
+            length_discussion_value_df = length_df.loc[length_df['discussion_id'] == d_idx]['no_posts']
+            length_discussion_value = length_discussion_value_df.iloc[0]
+            alignment_discussion_data.append([
+                d_idx,
+                bin_id,
+                length_discussion_value,
+                average_alignment_value,
+                class_counter,
+                u_class
+            ])
+
+        # Update class counter
+        class_counter += 1
+
+# Create df of discussion sentiment data
+print('[TASK] storing sentiment data')
+alignment_discussion_data_df = pd.DataFrame(alignment_discussion_data,
+                                  columns=['discussion_id', 'bin_id', 'discussion_length', 'average_alignment', 'alignment_class_overall', 'alignment_class_in_bin'])
+alignment_discussion_data_df.to_csv(__csv_alignment_class_data__)
+print('[INFO] task completed')
 
