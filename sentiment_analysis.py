@@ -14,6 +14,7 @@ from nltk.tokenize import sent_tokenize
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from tslearn.clustering import TimeSeriesKMeans
 import math
+import seaborn as sns
 
 
 # __preprocessing_adapted_LLA_avg_linear__ = 'AlignmentData/preprocessing_LLA_alignment_linear.csv'
@@ -321,6 +322,50 @@ ax2.hist(variance_df['variance_sentiment'], bins=np.arange(0, 1, 0.01),
          color='#d74a94')  # color='#d74a94'  histtype='step'
 
 fig.show()
+
+
+#%% Get min & max sentiment of all discussions
+mins = []
+maxs = []
+unique_disc_idxs = sentiment_df['discussion_id'].unique()
+for d_idx in unique_disc_idxs:
+    print('getting min & max', d_idx)
+    discussion_df = sentiment_df.loc[sentiment_df['discussion_id'] == d_idx]
+    discussion_sentiment_min = discussion_df['compound_sentiment'].min()
+    discussion_sentiment_max = discussion_df['compound_sentiment'].max()
+    mins.append([
+        d_idx,
+        discussion_sentiment_min
+    ])
+    maxs.append([
+        d_idx,
+        discussion_sentiment_max
+    ])
+
+min_df = pd.DataFrame(mins, columns=['discussion_id', 'min'])
+max_df = pd.DataFrame(maxs, columns=['discussion_id', 'max'])
+
+#%% Merge dataframes to get range data
+min_df = min_df.set_index('discussion_id')
+max_df = max_df.set_index('discussion_id')
+max_column = max_df['max']
+range_data = pd.concat([min_df, max_column], axis=1)
+range_data['discussion_id'] = range_data.index
+
+#%% Plot min & max sentiment distribution of discussions
+p = sns.jointplot(data=range_data, x="min", y="max", height=7, ratio=2, marginal_ticks=True, color="#d74a94", markers="o", linewidth=0, s=3)
+p.set_axis_labels(xlabel="Minimum compound sentiment score", ylabel="Maximum compound sentiment score")
+plt.savefig('./Results/Sentiment/joint_plot_range.png')
+
+
+#%% Get percentiles of min
+print('mean min: \t', range_data['min'].mean())
+print('percentiles: \t', range_data['min'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, .995, 1]))
+
+
+#%% Get percentiles of max
+print('mean max: \t', range_data['max'].mean())
+print('percentiles: \t', range_data['max'].describe(percentiles=[0, .01, .05, .1, .9, .95, .99, .995, 1]))
 
 
 #%% Plot message sentiment for 5 discussions
