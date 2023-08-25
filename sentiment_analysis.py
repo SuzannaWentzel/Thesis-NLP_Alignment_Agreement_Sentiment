@@ -25,6 +25,7 @@ __csv_sentiment_data__ = './AlignmentData/sentiment.csv'
 __pickle_path_best_sentiment_clustering_data__ = './PickleData/best_sentiment_clustering_data'
 __pickle_path_bin_ids__ = './PickleData/bin_ids'
 __csv_sentiment_class_data__ = './SentimentData/sentiment_classes.csv'
+__csv_sentiment_class_delta_data__ = './SentimentData/sentiment_classes_deltas.csv'
 
 
 #%% Load preprocessed data (see preprocessing.py)
@@ -353,7 +354,8 @@ range_data = pd.concat([min_df, max_column], axis=1)
 range_data['discussion_id'] = range_data.index
 
 #%% Plot min & max sentiment distribution of discussions
-p = sns.jointplot(data=range_data, x="min", y="max", height=7, ratio=2, marginal_ticks=True, color="#d74a94", markers="o", linewidth=0, s=3)
+# p = sns.jointplot(data=range_data, x="min", y="max", height=7, ratio=2, marginal_ticks=True, color="#d74a94", markers="o", linewidth=0, s=3)
+p = sns.jointplot(data=range_data, x="min", y="max", height=7, ratio=2, marginal_ticks=True, color="#d74a94", kind="hist")
 p.set_axis_labels(xlabel="Minimum compound sentiment score", ylabel="Maximum compound sentiment score")
 plt.savefig('./Results/Sentiment/joint_plot_range.png')
 
@@ -899,10 +901,16 @@ for bin_id in range(0, 8):
         for d_idx in discussion_ids_with_class:
             average_sentiment_value_df = average_df.loc[average_df['discussion_id'] == d_idx]['average_sentiment']
             average_sentiment_value = average_sentiment_value_df.iloc[0]
+            min_sentiment_value_df = range_data.loc[range_data['discussion_id'] == d_idx]['min']
+            min_sentiment_value = min_sentiment_value_df.iloc[0]
+            max_sentiment_value_df = range_data.loc[range_data['discussion_id'] == d_idx]['max']
+            max_sentiment_value = max_sentiment_value_df.iloc[0]
             sentiment_discussion_data.append([
                 d_idx,
                 bin_id,
                 average_sentiment_value,
+                min_sentiment_value,
+                max_sentiment_value,
                 class_counter,
                 u_class
             ])
@@ -913,9 +921,121 @@ for bin_id in range(0, 8):
 # Create df of discussion sentiment data
 print('[TASK] storing sentiment data')
 sentiment_discussion_data_df = pd.DataFrame(sentiment_discussion_data,
-                                  columns=['discussion_id', 'bin_id', 'average_sentiment', 'sentiment_class_overall', 'sentiment_class_in_bin'])
+                                  columns=['discussion_id', 'bin_id', 'average_sentiment', 'min_sentiment', 'max_sentiment', 'sentiment_class_overall', 'sentiment_class_in_bin'])
 sentiment_discussion_data_df.to_csv(__csv_sentiment_class_data__)
 print('[INFO] task completed')
 
+
+#%% Extract deltas of classes
+ranges = {}
+delta_data = []
+for i in range(0, 8):
+    ranges[i] = {}
+    bin_ids = bins_ids[i]
+    discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(bin_ids)]
+    pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
+    k = ks_per_bin[i]
+    bin_length = bin_lengths[i]
+
+    # Plot the best clustering:
+    best_model = best_models[i]
+    best_model_y_ra = best_model['y_ra']
+    best_model_predicted_classes_ra = best_model['predicted_classes_ra']
+    best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
+    best_n = best_model['try_counter']
+
+    fig_best, axs_best = plt.subplots(math.ceil(len(best_model_unique_classes_ra)/2), 2, figsize=(8 + (1 * (bin_length[1] / 50)), 4 * k))
+    fig_best.tight_layout()
+    fig_best.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.1)
+
+    for i_class in range(0, k):
+        discussions_with_class = best_model_predicted_classes_ra.loc[
+            best_model_predicted_classes_ra['class'] == i_class]
+        discussion_ids_with_class = discussions_with_class.index
+        discussions_df_with_class = discussions_in_bin_length.loc[
+            discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+        discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+        ax_x = math.floor(i_class / 2)
+        ax_y = i_class % 2
+        ax = axs_best[ax_x, ax_y]
+        ax.set_ylim((-1, 1))
+        ax.set_xlim((0, bin_length[1]))
+        ax.title.set_text(f'Class {i_class + 1}')
+        trend = discussions_pivoted_df_with_class.mean()
+        mean_per_post = trend.reset_index()
+        ax.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+        # ax.set_xticks([])
+
+        # remove nan rows
+        mean_per_post.dropna(subset=[0], inplace=True)
+        # compute deltas
+        ranges[i][i_class] = [mean_per_post.iloc[0][0], mean_per_post.iloc[-1][0]]
+        delta = mean_per_post.iloc[-1][0] - mean_per_post.iloc[0][0]
+        delta_data.append([
+            i,
+            i_class,
+            delta
+        ])
+
+    axs_best[math.floor((len(best_model_unique_classes_ra) - 1) / 2 / 2), 0].set_ylabel(
+        'Mean sentiment score per class')
+    axs_best[math.floor((len(best_model_unique_classes_ra) - 1) / 2), 0].set_xlabel('Posts in time')
+    axs_best[math.floor((len(best_model_unique_classes_ra) - 1) / 2), 1].set_xlabel('Posts in time')
+
+    fig_best.suptitle(f'Sentiment over time for bin {i + 1} (lengths {bin_length[0]}-{bin_length[1]})')
+    fig_best.savefig(f'Results/Sentiment/Clustering/attempt2/trends/best_sentiment_bin_{i + 1}.png')
+    fig_best.show()
+
+# Create df of delta sentiment data
+print('[TASK] storing sentiment delta data')
+sentiment_class_delta_df = pd.DataFrame(delta_data,
+                                  columns=['bin_id', 'class_id', 'delta'])
+sentiment_class_delta_df.to_csv(__csv_sentiment_class_delta_data__)
+print('[INFO] task completed')
+
+
+
+#%% Print graph of one class of one bin
+i_bin = 5
+u_class = 5
+bin_ids = bins_ids[i_bin]
+discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(bin_ids)]
+pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
+k = ks_per_bin[i_bin]
+bin_length = bin_lengths[i_bin]
+
+# Plot and save the best clustering:
+best_model = best_models[i_bin]
+best_model_y_ra = best_model['y_ra']
+best_model_predicted_classes_ra = best_model['predicted_classes_ra']
+best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
+best_n = best_model['try_counter']
+
+fig_best, ax_best = plt.subplots(figsize=(4 + (0.5 * (bin_length[1] / 50)), 6))
+fig_best.tight_layout()
+fig_best.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)
+
+discussions_with_class = best_model_predicted_classes_ra.loc[best_model_predicted_classes_ra['class'] == u_class]
+discussion_ids_with_class = discussions_with_class.index
+discussions_df_with_class = discussions_in_bin_length.loc[
+    discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+ax_best.set_ylim((-1, 1))
+ax_best.set_xlim((0, bin_length[1]))
+for d_idx in discussion_ids_with_class:
+    discussion = discussions_in_bin_length.loc[discussions_in_bin_length['discussion_id'] == d_idx]
+    ax_best.plot(discussion['time_post_id'], discussion['rolling_average'], linewidth=0.7)
+trend = discussions_pivoted_df_with_class.mean()
+mean_per_post = trend.reset_index()
+ax_best.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+
+ax_best.set_ylabel('Sentiment score from rolling averages')
+ax_best.set_xlabel('Posts in time')
+
+fig_best.suptitle(f'Sentiment over time for bin {i_bin+1}, class {u_class+1}')
+fig_best.savefig(f'Results/Sentiment/Clustering/attempt2/examples/sentiment_bin_{i_bin+1}_class_{u_class+1}')
+fig_best.show()
 
 

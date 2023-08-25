@@ -21,6 +21,7 @@ __csv_alignment_data__ = './AlignmentData/lexical_alignment_all.csv'
 __pickle_path_best_alignment_clustering_data__ = './PickleData/best_alignment_clustering_data'
 __pickle_path_bin_ids__ = './PickleData/bin_ids'
 __csv_alignment_class_data__ = './AlignmentData/alignment_classes.csv'
+__csv_alignment_class_delta_data__ = './AlignmentData/alignment_classes_deltas.csv'
 
 
 
@@ -759,6 +760,15 @@ for bin_lengths in lengths_for_bins:
 #%% Store discussion ids per bin
 store_data(bin_ids, __pickle_path_bin_ids__)
 
+
+#%% Load bins that were used before
+print_t('Loading preprocessed data from pickle path ' + str(__pickle_path_bin_ids__))
+store_file = open(__pickle_path_bin_ids__, 'rb')
+bin_ids = pickle.load(store_file)
+store_file.close()
+print_i('Loaded data from pickle')
+
+
 #%% Pretty print of pandas df function
 def pretty_print(df):
     with pd.option_context('display.max_rows', None, 'display.max_columns', None):
@@ -812,9 +822,11 @@ for post_id in  post_ids_for_example:
     # vocab = {a: vocab_a + response_preprocessed for a, vocab_a in vocab if a != post.username}
     # vocab[post.username] = vocab_not_author
 
+#%% Load ks per bin
+ks_per_bin = [4, 6, 5, 5, 4, 5, 5, 4]
+
 
 #%% Print graphs of best models
-ks_per_bin = [4, 6, 5, 5, 4, 5, 5, 4]
 for i in range(0, 8):
     k = ks_per_bin[i]
     bin_lengths = lengths_for_bins[i]
@@ -933,10 +945,123 @@ for bin_id in range(0, 8):
         # Update class counter
         class_counter += 1
 
-# Create df of discussion sentiment data
-print('[TASK] storing sentiment data')
+# Create df of discussion alignment data
+print('[TASK] storing alignment data')
 alignment_discussion_data_df = pd.DataFrame(alignment_discussion_data,
                                   columns=['discussion_id', 'bin_id', 'discussion_length', 'average_alignment', 'alignment_class_overall', 'alignment_class_in_bin'])
 alignment_discussion_data_df.to_csv(__csv_alignment_class_data__)
 print('[INFO] task completed')
 
+
+
+#%% Extract deltas of classes
+ranges = {}
+delta_data = []
+for i in range(0, 8):
+    ranges[i] = {}
+    bin_ids_bin = bin_ids[i]
+    discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(bin_ids_bin)]
+    pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
+    k = ks_per_bin[i]
+    bin_length = lengths_for_bins[i]
+
+    # Plot the best clustering:
+    best_model = best_models[i]
+    best_model_y_ra = best_model['y_ra']
+    best_model_predicted_classes_ra = best_model['predicted_classes_ra']
+    best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
+    best_n = best_model['try_counter']
+
+    fig_best, axs_best = plt.subplots(math.ceil(len(best_model_unique_classes_ra)/2), 2, figsize=(8 + (1 * (bin_length[1] / 50)), 4 * k))
+    fig_best.tight_layout()
+    fig_best.subplots_adjust(left=0.15, right=0.95, top=0.95, bottom=0.1)
+
+    for i_class in range(0, k):
+        discussions_with_class = best_model_predicted_classes_ra.loc[
+            best_model_predicted_classes_ra['class'] == i_class]
+        discussion_ids_with_class = discussions_with_class.index
+        discussions_df_with_class = discussions_in_bin_length.loc[
+            discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+        discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+        ax_x = math.floor(i_class / 2)
+        ax_y = i_class % 2
+        ax = axs_best[ax_x, ax_y]
+        ax.set_ylim((0, 1))
+        ax.set_xlim((0, bin_length[-1]))
+        ax.title.set_text(f'Class {i_class + 1}')
+        trend = discussions_pivoted_df_with_class.mean()
+        mean_per_post = trend.reset_index()
+        ax.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+        # ax.set_xticks([])
+
+        # remove nan rows
+        mean_per_post.dropna(subset=[0], inplace=True)
+        # compute deltas
+        ranges[i][i_class] = [mean_per_post.iloc[0][0], mean_per_post.iloc[-1][0]]
+        delta = mean_per_post.iloc[-1][0] - mean_per_post.iloc[0][0]
+        delta_data.append([
+            i,
+            i_class,
+            delta
+        ])
+
+    axs_best[math.floor((len(best_model_unique_classes_ra) - 1) / 2 / 2), 0].set_ylabel(
+        'Mean time-based word overlap per class')
+    axs_best[math.floor((len(best_model_unique_classes_ra) - 1) / 2), 0].set_xlabel('Posts in time')
+    axs_best[math.floor((len(best_model_unique_classes_ra) - 1) / 2), 1].set_xlabel('Posts in time')
+
+    fig_best.suptitle(f'Alignment trends over time for bin {i + 1} (lengths {bin_length[0]}-{bin_length[-1]})')
+    fig_best.savefig(f'Results/Clustering/trends/best_alignment_bin_{i + 1}.png')
+    fig_best.show()
+
+# Create df of delta alignment data
+print('[TASK] storing alignment delta data')
+alignment_class_delta_df = pd.DataFrame(delta_data,
+                                  columns=['bin_id', 'class_id', 'delta'])
+alignment_class_delta_df.to_csv(__csv_alignment_class_delta_data__)
+print('[INFO] task completed')
+
+
+#%% Print graphs of specific class per bin
+i_bin = 3
+u_class = 4
+
+k = ks_per_bin[i_bin]
+bin_lengths = lengths_for_bins[i_bin]
+disc_ids_with_length = length_df.loc[length_df['no_posts'].isin(bin_lengths)]['discussion_id'].unique()
+discussions_in_bin_length = rolling_average_df.loc[rolling_average_df['discussion_id'].isin(disc_ids_with_length)]
+pivoted_discussions_in_bin_length = discussions_in_bin_length.pivot(index='discussion_id', columns='time_post_id')
+
+# Plot and save the best clustering:
+best_model = best_models[i_bin]
+best_model_y_ra = best_model['y_ra']
+best_model_predicted_classes_ra = best_model['predicted_classes_ra']
+best_model_unique_classes_ra = best_model_predicted_classes_ra['class'].unique()
+best_n = best_model['try_counter']
+
+fig_best, ax_best = plt.subplots(figsize=(4 + (0.5 * (bin_lengths[-1] / 50)), 6))
+fig_best.tight_layout()
+fig_best.subplots_adjust(left=0.2, right=0.9, top=0.9, bottom=0.1)
+
+discussions_with_class = best_model_predicted_classes_ra.loc[best_model_predicted_classes_ra['class'] == u_class]
+discussion_ids_with_class = discussions_with_class.index
+discussions_df_with_class = discussions_in_bin_length.loc[
+    discussions_in_bin_length['discussion_id'].isin(discussion_ids_with_class)]
+discussions_pivoted_df_with_class = pivoted_discussions_in_bin_length.loc[discussion_ids_with_class]
+
+ax_best.set_ylim((0, 1))
+ax_best.set_xlim((0, bin_lengths[-1]))
+for d_idx in discussion_ids_with_class:
+    discussion = discussions_in_bin_length.loc[discussions_in_bin_length['discussion_id'] == d_idx]
+    ax_best.plot(discussion['time_post_id'], discussion['rolling_average'], linewidth=0.7)
+trend = discussions_pivoted_df_with_class.mean()
+mean_per_post = trend.reset_index()
+ax_best.plot(mean_per_post['time_post_id'], mean_per_post[0], linestyle='dashed', color='black')
+
+ax_best.set_ylabel('Time-based word overlap from rolling averages')
+ax_best.set_xlabel('Posts in time')
+
+fig_best.suptitle(f'Alignment over time for bin {i_bin+1}, class {u_class+1}')
+fig_best.savefig(f'Results/Clustering/examples/alignment_bin_{i_bin+1}_class_{u_class+1}')
+fig_best.show()
